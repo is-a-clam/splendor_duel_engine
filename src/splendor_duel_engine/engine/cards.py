@@ -1,11 +1,11 @@
 """Card data model and loader.
 
 Spec: docs/specs/splendor-duel-rules.md — "Components and setup" (67 jewel
-cards, 4 royal cards) and "Card abilities" (five abilities, including the
-``multicolor`` copy-bonus cards). The card values live in ``cards.json`` and
-are treated as authoritative data; the loader only adds the schema the engine
-needs (a colour bonus of ``None`` for joker/multicolor cards) and validates
-that the data still matches the spec's pinned counts.
+cards, 4 royal cards) and "Card abilities" (the four printed abilities; the
+multicolor copy-bonus rule is an orthogonal card property, Ruling R3). The card
+values live in ``cards.json`` and are treated as authoritative data; the loader
+exposes the data's ``"bonus": "joker"`` spelling as :attr:`Card.is_multicolor`
+and validates that the data still matches the spec's pinned counts.
 """
 
 from __future__ import annotations
@@ -33,36 +33,28 @@ _EXPECTED_TOTAL_POINTS: int = 92
 _EXPECTED_MULTICOLOR_CARDS: int = 9
 _EXPECTED_ROYAL_CARDS: int = 4
 
-# TODO(controller ruling, task 6): card L3-01 (3 points, cost 8 red) is the
-# associate/multicolor card that *also* prints "take another turn" in the real
-# game (verified against the Splendor Tactics card database, 2026-10-18). The
-# pinned schema gives each card a single ``ability`` field, so setting
-# ``ability: multicolor`` on the nine joker cards drops L3-01's extra turn.
-# Confirm whether the schema should carry a second ability for this card.
-
 
 class Ability(str, enum.Enum):
-    """A card ability; values match the keys in ``cards.json``.
+    """A printed card ability; values match the keys in ``cards.json``.
 
-    Spec §Card abilities. ``MULTICOLOR`` is the copy-bonus card; it copies only
-    a bonus colour, never another ability.
+    Spec §Card abilities. These are the four printed abilities; multicolor is a
+    separate card property (:attr:`Card.is_multicolor`), not an ability.
     """
 
     EXTRA_TURN = "extra_turn"
     TAKE_MATCHING_TOKEN = "take_matching_token"
     STEAL_TOKEN = "steal_token"
     PRIVILEGE = "privilege"
-    MULTICOLOR = "multicolor"
 
 
 @dataclass(frozen=True, slots=True)
 class Card:
     """A jewel card.
 
-    ``bonus`` is the card's colour bonus, or ``None`` when the card grants no
-    bonus: joker/multicolor cards (``ability is MULTICOLOR``) and the three
-    colorless point cards (``bonus_count == 0``). ``bonus_count`` is 0 exactly
-    for the colorless cards.
+    ``is_multicolor`` marks the copy-bonus (joker) cards; it is orthogonal to
+    ``ability``, so a card may be multicolor and still carry a printed ability
+    (``L3-01``). ``bonus`` is the card's colour bonus, or ``None`` for the
+    multicolor cards and the three colorless point cards (``bonus_count == 0``).
     """
 
     id: str
@@ -72,6 +64,7 @@ class Card:
     bonus: Color | None
     bonus_count: int
     ability: Ability | None
+    is_multicolor: bool
     cost: Tokens
 
 
@@ -139,14 +132,18 @@ def _parse_card(entry: object, source: pathlib.Path) -> Card:
     points = _as_int(entry.get("points"), f"{where}.points")
     crowns = _as_int(entry.get("crowns"), f"{where}.crowns")
     bonus_count = _as_int(entry.get("bonus_count"), f"{where}.bonus_count")
-    bonus = _parse_bonus(entry.get("bonus"), where)
+    bonus, is_multicolor = _parse_bonus(entry.get("bonus"), where)
     ability = _parse_ability(entry.get("ability"), where)
     cost = _parse_cost(entry.get("cost"), where)
 
-    if ability is Ability.MULTICOLOR:
+    if is_multicolor:
         if bonus is not None:
             raise ValueError(
                 f"{where}: multicolor card must have no bonus, got {bonus.value!r}"
+            )
+        if bonus_count < 1:
+            raise ValueError(
+                f"{where}: multicolor card must have bonus_count >= 1, got {bonus_count}"
             )
     elif bonus is None:
         if bonus_count != 0:
@@ -166,6 +163,7 @@ def _parse_card(entry: object, source: pathlib.Path) -> Card:
         bonus=bonus,
         bonus_count=bonus_count,
         ability=ability,
+        is_multicolor=is_multicolor,
         cost=cost,
     )
 
@@ -184,17 +182,19 @@ def _parse_royal(entry: object, source: pathlib.Path) -> RoyalCard:
     )
 
 
-def _parse_bonus(value: object, where: str) -> Color | None:
-    # "joker" is the data spelling of the multicolor cards' absent bonus.
-    if value is None or value == "joker":
-        return None
+def _parse_bonus(value: object, where: str) -> tuple[Color | None, bool]:
+    # "joker" is the data spelling of the multicolor (copy-bonus) property.
+    if value is None:
+        return None, False
+    if value == "joker":
+        return None, True
     try:
         bonus = Color(value)
     except ValueError as exc:
         raise ValueError(f"{where}: unknown bonus {value!r}") from exc
     if bonus not in GEM_COLORS:
         raise ValueError(f"{where}: bonus must be a gem color, got {value!r}")
-    return bonus
+    return bonus, False
 
 
 def _parse_ability(value: object, where: str) -> Ability | None:
@@ -255,7 +255,7 @@ def _validate_jewel_deck(jewels: tuple[Card, ...]) -> None:
         raise ValueError(
             f"expected {_EXPECTED_TOTAL_POINTS} total jewel prestige points, got {points}"
         )
-    multicolor = sum(1 for card in jewels if card.ability is Ability.MULTICOLOR)
+    multicolor = sum(1 for card in jewels if card.is_multicolor)
     if multicolor != _EXPECTED_MULTICOLOR_CARDS:
         raise ValueError(
             f"expected {_EXPECTED_MULTICOLOR_CARDS} multicolor jewel cards, got {multicolor}"

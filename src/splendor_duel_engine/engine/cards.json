@@ -313,7 +313,7 @@
       "crowns": 1,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 4,
         "blue": 0,
@@ -415,7 +415,7 @@
       "crowns": 0,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 0,
@@ -432,7 +432,7 @@
       "crowns": 0,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 2,
@@ -449,7 +449,7 @@
       "crowns": 0,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 2,
         "blue": 0,
@@ -517,7 +517,7 @@
       "crowns": 2,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 0,
@@ -534,7 +534,7 @@
       "crowns": 2,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 6,
@@ -772,7 +772,7 @@
       "crowns": 0,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 0,
@@ -925,7 +925,7 @@
       "crowns": 3,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": null,
       "cost": {
         "white": 0,
         "blue": 0,
@@ -942,7 +942,7 @@
       "crowns": 0,
       "bonus": "joker",
       "bonus_count": 1,
-      "ability": "multicolor",
+      "ability": "extra_turn",
       "cost": {
         "white": 0,
         "blue": 0,

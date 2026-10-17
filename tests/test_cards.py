@@ -7,6 +7,7 @@ Spec: docs/specs/splendor-duel-rules.md — "Components and setup" and
 from __future__ import annotations
 
 import json
+from collections import Counter
 
 import pytest
 
@@ -20,21 +21,27 @@ def test_deck_composition():
     assert [sum(1 for c in jewels if c.level == n) for n in (1, 2, 3)] == [30, 24, 13]
     assert sum(c.crowns for c in jewels) == 28  # spec: total crowns
     assert sum(c.points for c in jewels) == 92  # spec: total prestige
+    # Restored data pins the ability census and the orthogonal multicolor set.
+    census = Counter(c.ability for c in jewels)
+    assert census[Ability.EXTRA_TURN] == 6
+    assert census[Ability.TAKE_MATCHING_TOKEN] == 5
+    assert census[Ability.STEAL_TOKEN] == 5
+    assert census[Ability.PRIVILEGE] == 5
+    assert census[None] == 46
+    assert sum(1 for c in jewels if c.is_multicolor) == 9
 
 
 def test_multicolor_cards():
     jewels, _ = load_cards()
-    multi = [c for c in jewels if c.ability is Ability.MULTICOLOR]
+    multi = [c for c in jewels if c.is_multicolor]
     assert len(multi) == 9  # spec: 9 copy-bonus cards
-    assert all(c.bonus is None for c in multi)
-    # Every other card keeps its color bonus, except the spec's "colorless
-    # no-bonus cards" (bonus_count == 0; spec: "colorless no-bonus cards and
-    # royals do not count"). Only the packaged joker cards lose their bonus.
-    assert all(
-        c.bonus is not None
-        for c in jewels
-        if c.ability is not Ability.MULTICOLOR and c.bonus_count > 0
-    )
+    assert all(c.bonus is None and c.bonus_count >= 1 for c in multi)
+    # multicolor is orthogonal to abilities: L3-01 is multicolor AND extra_turn (Ruling R3)
+    assert [c.id for c in multi if c.ability is not None] == ["L3-01"]
+    # the colorless no-bonus cards have no colour bonus and are not multicolor
+    colorless = [c for c in jewels if not c.is_multicolor and c.bonus is None]
+    assert sorted(c.id for c in colorless) == ["L1-29", "L2-23", "L3-12"]
+    assert all(c.bonus_count == 0 for c in colorless)
 
 
 def test_royal_cards():
