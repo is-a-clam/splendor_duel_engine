@@ -83,7 +83,8 @@ reserved before you own any bonus; the restriction applies only at purchase.
 
 ## Card abilities [S1, S3, S5]
 
-Abilities resolve **immediately on purchase**. Five abilities exist:
+Abilities resolve **immediately on purchase**. Four abilities exist, plus the
+orthogonal multicolor copy-bonus rule:
 
 | Ability | Effect |
 |---|---|
@@ -92,6 +93,15 @@ Abilities resolve **immediately on purchase**. Five abilities exist:
 | `take_matching_token` | Take 1 token of this card's bonus color from the board. Ignored if none. |
 | `privilege` | Take 1 privilege from the supply; if none, take 1 from the opponent. |
 | `steal_token` | Take 1 gem or pearl token of your choice from the opponent. Gold cannot be stolen. Ignored if the opponent has none. |
+
+**Representation (Ruling R3).** Multicolor is orthogonal to the four printed
+abilities: a card may be multicolor *and* carry an ability. `L3-01` (3 points,
+cost 8 red) is the case in point — it copies a bonus *and* grants an extra turn.
+The card data therefore encodes multicolor in the bonus field
+(`"bonus": "joker"`), which the loader exposes as `Card.is_multicolor`;
+`Ability` contains only the four printed abilities. Mechanically, multicolor
+copies the *bonus* and never an ability, so `L3-01` resolves its colour choice
+and still takes its extra turn.
 
 ## Privileges [S1, S3]
 

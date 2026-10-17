@@ -37,7 +37,7 @@ These are the failure modes no single task naturally exercises; each is pinned t
 
 **Files:**
 - Modify: `pyproject.toml` (remove `[project.scripts]`, add dev group)
-- Modify: `src/splendor_duel_engine/engine/cards.json` (9 multicolor cards get `ability: "multicolor"`)
+- Modify: none — `cards.json` is verified data and stays byte-identical; multicolor is already encoded by `bonus: "joker"` (Ruling R3)
 - Create: `src/splendor_duel_engine/engine/colors.py`
 - Create: `src/splendor_duel_engine/engine/cards.py`
 - Test: `tests/test_cards.py`
@@ -47,8 +47,8 @@ These are the failure modes no single task naturally exercises; each is pinned t
   - `class Color(enum.Enum)`: `WHITE, BLUE, GREEN, RED, BLACK, PEARL, GOLD` (str values matching cards.json keys).
   - `GEM_COLORS: tuple[Color, ...]` — the 5 gems, no pearl/gold.
   - `@dataclass(frozen=True, slots=True) class Tokens`: fields `white, blue, green, red, black, pearl, gold: int = 0`; methods `count(color: Color) -> int`, `total() -> int`, `__add__(other: Tokens) -> Tokens`, `__sub__(other: Tokens) -> Tokens`. Hashable (used in state and action types).
-  - `class Ability(enum.Enum)`: `EXTRA_TURN, TAKE_MATCHING_TOKEN, STEAL_TOKEN, PRIVILEGE, MULTICOLOR` (str values matching cards.json).
-  - `@dataclass(frozen=True, slots=True) class Card`: `id: str, level: int, points: int, crowns: int, bonus: Color | None, bonus_count: int, ability: Ability | None, cost: Tokens`. `bonus is None` iff `ability is Ability.MULTICOLOR`.
+  - `class Ability(enum.Enum)`: `EXTRA_TURN, TAKE_MATCHING_TOKEN, STEAL_TOKEN, PRIVILEGE` (str values matching cards.json). Multicolor is deliberately **not** a member: it is orthogonal to the four printed abilities (Ruling R3).
+  - `@dataclass(frozen=True, slots=True) class Card`: `id: str, level: int, points: int, crowns: int, bonus: Color | None, bonus_count: int, ability: Ability | None, is_multicolor: bool, cost: Tokens`. `bonus is None` covers both multicolor cards (`is_multicolor=True`, `bonus_count >= 1`) and colorless no-bonus cards (`is_multicolor=False`, `bonus_count == 0`).
   - `@dataclass(frozen=True, slots=True) class RoyalCard`: `id: str, points: int, ability: Ability | None`.
   - `def load_cards() -> tuple[tuple[Card, ...], tuple[RoyalCard, ...]]` — jewel cards in file order, then royals. Raises `ValueError` on any validation failure.
 
@@ -66,10 +66,15 @@ def test_deck_composition():
 
 def test_multicolor_cards():
     jewels, _ = load_cards()
-    multi = [c for c in jewels if c.ability is Ability.MULTICOLOR]
+    multi = [c for c in jewels if c.is_multicolor]
     assert len(multi) == 9                      # spec: 9 copy-bonus cards
-    assert all(c.bonus is None for c in multi)
-    assert all(c.bonus is not None for c in jewels if c.ability is not Ability.MULTICOLOR)
+    assert all(c.bonus is None and c.bonus_count >= 1 for c in multi)
+    # multicolor is orthogonal to abilities: L3-01 is multicolor AND extra_turn (Ruling R3)
+    assert [c.id for c in multi if c.ability is not None] == ["L3-01"]
+    # the colorless no-bonus cards have no colour bonus and are not multicolor
+    colorless = [c for c in jewels if not c.is_multicolor and c.bonus is None]
+    assert sorted(c.id for c in colorless) == ["L1-29", "L2-23", "L3-12"]
+    assert all(c.bonus_count == 0 for c in colorless)
 
 def test_royal_cards():
     _, royals = load_cards()
@@ -92,7 +97,7 @@ Run: `uv run pytest tests/test_cards.py -v` — expected: FAIL (imports missing)
 
 - [ ] **Step 3: Edit `pyproject.toml` and `cards.json`; implement `colors.py` and `cards.py`**
 
-pyproject: delete the `[project.scripts]` section (no `main` exists); add `[dependency-groups] dev = ["pytest>=8", "ruff>=0.1"]`. cards.json: set `"ability": "multicolor"` on the 9 cards whose `bonus` is `"joker"` (spec §Card abilities; change cites the spec, values untouched). Loader maps `bonus: "joker"` → `bonus=None`; validates the counts in the two tests above plus "cost keys ⊆ colors ∪ {pearl}" and "id uniqueness", raising `ValueError` with the failing expectation in the message.
+pyproject: delete the `[project.scripts]` section (no `main` exists); add `[dependency-groups] dev = ["pytest>=8", "ruff>=0.1"]`. `cards.json` is **not** edited: it is field-verified data and multicolor is already encoded as `bonus: "joker"` (Ruling R3); the loader maps `"joker"` → `bonus=None, is_multicolor=True`. It validates the counts in the two tests above plus "cost keys ⊆ colors ∪ {pearl}" and "id uniqueness", raising `ValueError` with the failing expectation in the message.
 
 - [ ] **Step 4: Run tests, lint**
 
@@ -412,7 +417,7 @@ git add -A && git commit -m "feat: reserve and buy with payment decision point (
   - `TAKE_MATCHING_TOKEN`: auto-take 1 board token of the card's bonus color if present (no decision point; ignored otherwise — spec).
   - `PRIVILEGE`: `_grant_privilege` on the buyer.
   - `STEAL_TOKEN`: new phase `STEAL_TOKEN` enumerating `ChooseStealToken(color)` for each non-gold token color the opponent holds; gold immune (spec).
-  - `MULTICOLOR`: new phase `MULTICOLOR_COLOR` enumerating `ChooseMulticolor(color)` for each color with `bonus.count(color) > 0`; sets `PurchasedCard.chosen_color`, which adds `bonus_count` of that color to the buyer's bonus and makes the card's prestige count toward that color's 10-point total (Task 8 win check reads `chosen_color`).
+  - `is_multicolor` (a card property, not an `Ability`; Ruling R3): new phase `MULTICOLOR_COLOR` enumerating `ChooseMulticolor(color)` for each color with `bonus.count(color) > 0`; sets `PurchasedCard.chosen_color`, which adds `bonus_count` of that color to the buyer's bonus and makes the card's prestige count toward that color's 10-point total (Task 8 win check reads `chosen_color`).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -427,7 +432,8 @@ def test_steal_ignored_when_opponent_has_no_tokens(): ...
 def test_multicolor_choose_color_adds_bonus_and_counts_for_that_color():
     # after ChooseMulticolor(RED): buyer bonus.red += card.bonus_count; card prestige counts toward RED (Task 8 reads this)
 def test_multicolor_copies_only_bonus_not_ability():
-    # a multicolor card has ability MULTICOLOR; after resolution no extra ability fires (spec)
+    # multicolor copies the bonus, never an ability: a multicolor-only card fires no
+    # extra ability, while L3-01 (multicolor + extra_turn) still plays again (Ruling R3)
 def test_bought_card_ability_resolves_before_next_player_turns(): ...
 ```
 
@@ -437,7 +443,7 @@ Run: `uv run pytest tests/test_abilities.py -v` — expected: FAIL.
 
 - [ ] **Step 3: Implement ability resolution chain**
 
-After `PayTokens` succeeds: resolve abilities in a fixed order — `MULTICOLOR` (decision point) / `STEAL_TOKEN` (decision point) / `TAKE_MATCHING_TOKEN` / `PRIVILEGE` (immediate) / `EXTRA_TURN` (flag) — then return to `USE_PRIVILEGES`. If a decision point phase is entered, store enough in `pending`/a new `pending_ability` field (add `pending_ability: Ability | None` to `GameState`) to resume after the choice. On `extra_turn`, the end-of-turn transition (still the simple one from Task 3) keeps `current_player` and clears the flag; otherwise advance the seat.
+After `PayTokens` succeeds: resolve abilities in a fixed order — multicolor colour choice (if `card.is_multicolor`; decision point) / `STEAL_TOKEN` (decision point) / `TAKE_MATCHING_TOKEN` / `PRIVILEGE` (immediate) / `EXTRA_TURN` (flag) — then return to `USE_PRIVILEGES`. If a decision point phase is entered, store enough in `pending`/a new `pending_ability` field (add `pending_ability: Ability | None` to `GameState`) to resume after the choice. On `extra_turn`, the end-of-turn transition (still the simple one from Task 3) keeps `current_player` and clears the flag; otherwise advance the seat.
 
 - [ ] **Step 4: Run tests, lint**
 
@@ -446,7 +452,7 @@ Run: `uv run pytest -v && uv run ruff check .` — expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A && git commit -m "feat: five card abilities incl. multicolor chosen-color accounting (spec: abilities)"
+git add -A && git commit -m "feat: four card abilities plus multicolor chosen-color accounting (spec: abilities)"
 ```
 
 ---
