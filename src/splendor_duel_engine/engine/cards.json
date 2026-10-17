@@ -1,0 +1,1165 @@
+{
+  "jewel_cards": [
+    {
+      "id": "L1-00",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 1,
+        "blue": 1,
+        "green": 1,
+        "red": 1,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-01",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 2,
+        "blue": 2,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-02",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": "take_matching_token",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 2,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-03",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 1,
+        "blue": 0,
+        "green": 1,
+        "red": 1,
+        "black": 1,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-04",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 2,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-05",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": "take_matching_token",
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-06",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 1,
+        "blue": 1,
+        "green": 0,
+        "red": 1,
+        "black": 1,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-07",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-08",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": "take_matching_token",
+      "cost": {
+        "white": 2,
+        "blue": 2,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-09",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 1,
+        "blue": 1,
+        "green": 1,
+        "red": 0,
+        "black": 1,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-10",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-11",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": "take_matching_token",
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 2,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-12",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 1,
+        "green": 1,
+        "red": 1,
+        "black": 1,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-13",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 2,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-14",
+      "level": 1,
+      "points": 0,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": "take_matching_token",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-15",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 3,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-16",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 3,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-17",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 3,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-18",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 4,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-19",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 3,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-20",
+      "level": 1,
+      "points": 0,
+      "crowns": 1,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 3,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-21",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 3,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-22",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 3,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-23",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 3,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-24",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 4,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-25",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 0,
+        "red": 2,
+        "black": 1,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-26",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 2,
+        "red": 0,
+        "black": 1,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L1-27",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 3,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-28",
+      "level": 1,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 3,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L1-29",
+      "level": 1,
+      "points": 3,
+      "crowns": 0,
+      "bonus": null,
+      "bonus_count": 0,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 4,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-00",
+      "level": 2,
+      "points": 0,
+      "crowns": 2,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 6,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-01",
+      "level": 2,
+      "points": 0,
+      "crowns": 2,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 6,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-02",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": "steal_token",
+      "cost": {
+        "white": 4,
+        "blue": 0,
+        "green": 3,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-03",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 2,
+      "ability": null,
+      "cost": {
+        "white": 5,
+        "blue": 2,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-04",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": "steal_token",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 4,
+        "red": 0,
+        "black": 3,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-05",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 2,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 5,
+        "red": 2,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-06",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": "steal_token",
+      "cost": {
+        "white": 3,
+        "blue": 0,
+        "green": 0,
+        "red": 4,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-07",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 2,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 5,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-08",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": "steal_token",
+      "cost": {
+        "white": 0,
+        "blue": 3,
+        "green": 0,
+        "red": 0,
+        "black": 4,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-09",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 2,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 5,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-10",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": "steal_token",
+      "cost": {
+        "white": 0,
+        "blue": 4,
+        "green": 0,
+        "red": 3,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-11",
+      "level": 2,
+      "points": 1,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 2,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 5,
+        "green": 2,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L2-12",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": "privilege",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 4,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-13",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": "privilege",
+      "cost": {
+        "white": 2,
+        "blue": 4,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-14",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": "privilege",
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 4,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-15",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 6,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-16",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": "privilege",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 4,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-17",
+      "level": 2,
+      "points": 2,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": "privilege",
+      "cost": {
+        "white": 4,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-18",
+      "level": 2,
+      "points": 2,
+      "crowns": 1,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 2,
+        "red": 2,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-19",
+      "level": 2,
+      "points": 2,
+      "crowns": 1,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-20",
+      "level": 2,
+      "points": 2,
+      "crowns": 1,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 2,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-21",
+      "level": 2,
+      "points": 2,
+      "crowns": 1,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 2,
+        "green": 2,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-22",
+      "level": 2,
+      "points": 2,
+      "crowns": 1,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 2,
+        "black": 2,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L2-23",
+      "level": 2,
+      "points": 5,
+      "crowns": 0,
+      "bonus": null,
+      "bonus_count": 0,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 6,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-00",
+      "level": 3,
+      "points": 0,
+      "crowns": 3,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 8,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-01",
+      "level": 3,
+      "points": 3,
+      "crowns": 0,
+      "bonus": "joker",
+      "bonus_count": 1,
+      "ability": "extra_turn",
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 0,
+        "red": 8,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-02",
+      "level": 3,
+      "points": 3,
+      "crowns": 2,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 3,
+        "blue": 0,
+        "green": 5,
+        "red": 3,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-03",
+      "level": 3,
+      "points": 3,
+      "crowns": 2,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 3,
+        "blue": 0,
+        "green": 3,
+        "red": 0,
+        "black": 5,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-04",
+      "level": 3,
+      "points": 3,
+      "crowns": 2,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 5,
+        "blue": 3,
+        "green": 0,
+        "red": 3,
+        "black": 0,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-05",
+      "level": 3,
+      "points": 3,
+      "crowns": 2,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 5,
+        "green": 3,
+        "red": 0,
+        "black": 3,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-06",
+      "level": 3,
+      "points": 3,
+      "crowns": 2,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 3,
+        "green": 0,
+        "red": 5,
+        "black": 3,
+        "pearl": 1
+      }
+    },
+    {
+      "id": "L3-07",
+      "level": 3,
+      "points": 4,
+      "crowns": 0,
+      "bonus": "black",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 0,
+        "green": 0,
+        "red": 2,
+        "black": 6,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-08",
+      "level": 3,
+      "points": 4,
+      "crowns": 0,
+      "bonus": "blue",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 2,
+        "blue": 6,
+        "green": 2,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-09",
+      "level": 3,
+      "points": 4,
+      "crowns": 0,
+      "bonus": "green",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 2,
+        "green": 6,
+        "red": 2,
+        "black": 0,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-10",
+      "level": 3,
+      "points": 4,
+      "crowns": 0,
+      "bonus": "red",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 0,
+        "blue": 0,
+        "green": 2,
+        "red": 6,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-11",
+      "level": 3,
+      "points": 4,
+      "crowns": 0,
+      "bonus": "white",
+      "bonus_count": 1,
+      "ability": null,
+      "cost": {
+        "white": 6,
+        "blue": 2,
+        "green": 0,
+        "red": 0,
+        "black": 2,
+        "pearl": 0
+      }
+    },
+    {
+      "id": "L3-12",
+      "level": 3,
+      "points": 6,
+      "crowns": 0,
+      "bonus": null,
+      "bonus_count": 0,
+      "ability": null,
+      "cost": {
+        "white": 8,
+        "blue": 0,
+        "green": 0,
+        "red": 0,
+        "black": 0,
+        "pearl": 0
+      }
+    }
+  ],
+  "royal_cards": [
+    {
+      "id": "R-0",
+      "points": 2,
+      "ability": "extra_turn"
+    },
+    {
+      "id": "R-1",
+      "points": 2,
+      "ability": "privilege"
+    },
+    {
+      "id": "R-2",
+      "points": 2,
+      "ability": "steal_token"
+    },
+    {
+      "id": "R-3",
+      "points": 3,
+      "ability": null
+    }
+  ]
+}
