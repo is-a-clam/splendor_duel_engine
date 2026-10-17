@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, stdlib only (no runtime deps), pytest + ruff via uv dev dependency group.
 
-**Spec:** `docs/specs/splendor-duel-rules.md` — every task cites it. All card data in `src/splendor_duel_engine/engine/cards.json` is field-verified against the official BGA implementation; do not alter card values, only the one schema change pinned in Task 1.
+**Spec:** `docs/specs/splendor-duel-rules.md` — every task cites it. All card data in `src/splendor_duel_engine/engine/cards.json` is field-verified against the official BGA implementation; **no** edit to it is sanctioned (Ruling R3: the file stays byte-identical to baseline, and multicolor is modelled in the loader instead).
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 - Deck order convention: `decks[level][-1]` is the top card (pop from the end).
 - Type hints on all public functions; ruff clean (`uv run ruff check . && uv run ruff format .`); tests pass (`uv run pytest`).
 - No end-game bonus scoring, no tiebreaker, no purse (spec: verified absent).
-- `cards.json` values are immutable data; the only sanctioned edit is the schema change in Task 1, citing the spec.
+- `cards.json` values are immutable data; **no** edit to it is sanctioned. Multicolor is modelled in the loader as `Card.is_multicolor`, derived from `"bonus": "joker"` (Ruling R3).
 
 ## Review Focus
 
