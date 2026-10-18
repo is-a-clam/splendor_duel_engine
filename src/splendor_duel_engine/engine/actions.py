@@ -662,7 +662,10 @@ def _resolve_multicolor(state: GameState, card: Card, active: int) -> GameState:
 
 
 def _resolve_steal_token(state: GameState, card: Card, active: int) -> GameState:
-    """Enter STEAL_TOKEN phase if opponent has stealable tokens."""
+    """Enter STEAL_TOKEN phase if card has the ability and opponent has stealable tokens."""
+    if card.ability != Ability.STEAL_TOKEN:
+        return _resolve_take_matching_token(state, card, active)
+
     opp = 1 - active
     opp_tokens = state.players[opp].tokens
     # Non-gold colors opponent has
@@ -734,6 +737,7 @@ def _resolve_extra_turn(state: GameState, card: Card, active: int) -> GameState:
             current_player=active,
             phase=Phase.USE_PRIVILEGES,
             extra_turn=False,
+            pending_buy=None,  # Clear pending_buy - purchase fully complete
         )
 
     # Set extra_turn flag, stay in USE_PRIVILEGES for same player
@@ -742,6 +746,7 @@ def _resolve_extra_turn(state: GameState, card: Card, active: int) -> GameState:
         current_player=active,
         phase=Phase.USE_PRIVILEGES,
         extra_turn=True,
+        pending_buy=None,  # Clear pending_buy - purchase fully complete
     )
 
 

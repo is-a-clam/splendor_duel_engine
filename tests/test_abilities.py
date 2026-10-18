@@ -545,15 +545,83 @@ class TestAbilityResolutionOrder:
         assert st.current_player == 0
 
     def test_multicolor_then_steal_token_order(self):
-        """MULTICOLOR_COLOR resolves before STEAL_TOKEN when a card has both.
+        """MULTICOLOR_COLOR resolves before STEAL_TOKEN; multicolor card without STEAL_TOKEN skips steal phase."""
+        base_st = new_game(0)
+        jewels, _ = load_cards()
+        # Find a multicolor card (e.g., L1-24) - these don't have STEAL_TOKEN
+        multicolor_card = next(
+            c
+            for c in jewels
+            if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
+        )
+        reserved = ReservedCard(card=multicolor_card, from_deck=False)
+        st = replace(
+            base_st,
+            current_player=0,
+            phase=Phase.MANDATORY,
+            players=(
+                replace(
+                    base_st.players[0],
+                    bonus=Tokens(white=1),  # Has colored bonus for multicolor choice
+                    tokens=Tokens(gold=20),
+                    reserved=(reserved,),
+                ),
+                replace(base_st.players[1], tokens=Tokens(white=1)),  # Opponent has stealable token
+            ),
+        )
 
-        Note: No actual card has both multicolor and steal_token, but we test
-        the resolution chain order by using a multicolor card and verifying
-        steal_token would come after if it existed.
-        """
-        # This test documents the expected order:
-        # MULTICOLOR_COLOR -> STEAL_TOKEN -> TAKE_MATCHING_TOKEN -> PRIVILEGE -> EXTRA_TURN
-        # Individual ability tests verify each step works correctly.
+        # Buy the multicolor card
+        st = _complete_buy(st, multicolor_card)
+
+        # Should enter MULTICOLOR_COLOR phase (not STEAL_TOKEN)
+        assert st.phase is Phase.MULTICOLOR_COLOR
+        assert st.pending_ability is None  # No pending ability during multicolor choice
+
+        # Choose a color
+        dp = decide(st)
+        choose_color = next(a for a in dp.legal_actions if isinstance(a, ChooseMulticolor))
+        st = apply(st, choose_color)
+
+        # After multicolor resolution, should continue to next abilities
+        # Since this card has no STEAL_TOKEN, should NOT enter STEAL_TOKEN phase
+        # and should proceed through remaining abilities to USE_PRIVILEGES
+        assert st.phase is Phase.USE_PRIVILEGES
+        assert st.pending_buy is None
+
+    def test_steal_token_ability_check_gated(self):
+        """STEAL_TOKEN phase only entered when card has the ability, not just multicolor."""
+        base_st = new_game(0)
+        jewels, _ = load_cards()
+        # Find a multicolor card WITHOUT STEAL_TOKEN
+        multicolor_no_steal = next(
+            c
+            for c in jewels
+            if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
+        )
+        reserved = ReservedCard(card=multicolor_no_steal, from_deck=False)
+        st = replace(
+            base_st,
+            current_player=0,
+            phase=Phase.MANDATORY,
+            players=(
+                replace(
+                    base_st.players[0],
+                    bonus=Tokens(white=1),
+                    tokens=Tokens(gold=20),
+                    reserved=(reserved,),
+                ),
+                replace(base_st.players[1], tokens=Tokens(white=1)),  # Opponent has stealable token
+            ),
+        )
+
+        # Buy the multicolor card (no STEAL_TOKEN ability)
+        st = _complete_buy(st, multicolor_no_steal)
+
+        # Choose multicolor
+        st = apply(st, next(a for a in decide(st).legal_actions if isinstance(a, ChooseMulticolor)))
+
+        # Should NOT enter STEAL_TOKEN phase (card lacks the ability)
+        assert st.phase is Phase.USE_PRIVILEGES
 
 
 class TestPendingAbilityField:
