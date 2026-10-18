@@ -29,6 +29,88 @@ _DIRECTIONS_8 = (
 )
 
 
+# ===== State update helpers =====
+
+def _replace_player(state: GameState, player_idx: int, new_player: PlayerState) -> GameState:
+    """Replace one player in the players tuple."""
+    new_players = list(state.players)
+    new_players[player_idx] = new_player
+    return dataclasses.replace(state, players=(new_players[0], new_players[1]))
+
+
+def _update_board(state: GameState, idx: int, new_color: Color | None) -> GameState:
+    """Update a single board index."""
+    board = list(state.board)
+    board[idx] = new_color
+    return dataclasses.replace(state, board=tuple(board))
+
+
+def _remove_from_board(state: GameState, idx: int) -> GameState:
+    """Set a board index to None (remove token)."""
+    board = list(state.board)
+    board[idx] = None
+    return dataclasses.replace(state, board=tuple(board))
+
+
+def _add_to_bag(state: GameState, tokens: Tokens) -> GameState:
+    """Add tokens to bag."""
+    new_bag_dict = {c.value: state.bag.count(c) + tokens.count(c) for c in Color}
+    return dataclasses.replace(state, bag=Tokens(**new_bag_dict))
+
+
+def _remove_from_bag(state: GameState, tokens: Tokens) -> GameState:
+    """Remove tokens from bag."""
+    new_bag_dict = {c.value: state.bag.count(c) - tokens.count(c) for c in Color}
+    return dataclasses.replace(state, bag=Tokens(**new_bag_dict))
+
+
+def _update_pyramid_decks(state: GameState, pyramid: list[list[Card | None]], decks: list[list[Card]]) -> GameState:
+    """Update pyramid and decks together."""
+    return dataclasses.replace(
+        state,
+        pyramid=tuple(tuple(r) for r in pyramid),
+        decks=tuple(tuple(d) for d in decks),
+    )
+
+
+def _set_pyramid_slot(state: GameState, row_idx: int, col_idx: int, card: Card | None) -> GameState:
+    """Set a pyramid slot and return new state."""
+    new_pyramid = [list(r) for r in state.pyramid]
+    new_pyramid[row_idx][col_idx] = card
+    return dataclasses.replace(state, pyramid=tuple(tuple(r) for r in new_pyramid))
+
+
+def _pop_deck(state: GameState, deck_idx: int) -> tuple[Card, GameState]:
+    """Pop top card from deck and return (card, new_state)."""
+    new_decks = [list(d) for d in state.decks]
+    card = new_decks[deck_idx].pop()
+    new_state = dataclasses.replace(state, decks=tuple(tuple(d) for d in new_decks))
+    return card, new_state
+
+
+def _pop_pyramid(state: GameState, row_idx: int, col_idx: int) -> tuple[Card | None, GameState]:
+    """Take card from pyramid slot and return (card, new_state)."""
+    new_pyramid = [list(r) for r in state.pyramid]
+    card = new_pyramid[row_idx][col_idx]
+    new_pyramid[row_idx][col_idx] = None
+    new_state = dataclasses.replace(state, pyramid=tuple(tuple(r) for r in new_pyramid))
+    return card, new_state
+
+
+def _refill_pyramid_from_deck(state: GameState, row_idx: int, col_idx: int) -> GameState:
+    """Refill pyramid slot from corresponding deck."""
+    new_pyramid = [list(r) for r in state.pyramid]
+    new_decks = [list(d) for d in state.decks]
+    deck = new_decks[row_idx]
+    if deck:
+        new_pyramid[row_idx][col_idx] = deck.pop()
+    return dataclasses.replace(
+        state,
+        pyramid=tuple(tuple(r) for r in new_pyramid),
+        decks=tuple(tuple(d) for d in new_decks),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class UsePrivilege:
     index: int
@@ -551,9 +633,8 @@ def _apply_use_privilege(state: GameState, index: int) -> GameState:
     if color is None or color == Color.GOLD:
         raise ValueError(f"no non-gold token at index {index}")
 
-    new_board_list = list(state.board)
-    new_board_list[index] = None
-    new_board = tuple(new_board_list)
+    # Use helper to remove token from board
+    state = _remove_from_board(state, index)
 
     # Add token to player's hand
     taken_tokens = Tokens(**{color.value: 1})
@@ -561,17 +642,12 @@ def _apply_use_privilege(state: GameState, index: int) -> GameState:
         ap, tokens=ap.tokens + taken_tokens, privileges=ap.privileges - 1
     )
 
-    new_players_list = list(state.players)
-    new_players_list[active] = new_ap
-
     # Determine next phase: stay in USE_PRIVILEGES if more privileges, else REPLENISH
     next_phase = Phase.USE_PRIVILEGES if new_ap.privileges > 0 else Phase.REPLENISH
 
     return dataclasses.replace(
-        state,
-        players=(new_players_list[0], new_players_list[1]),
-        board=new_board,
-        current_player=active,  # same player continues
+        _replace_player(state, active, new_ap),
+        current_player=active,
         phase=next_phase,
     )
 
@@ -593,14 +669,12 @@ def _apply_replenish(state: GameState) -> GameState:
     empty_indices = [idx for idx in SPIRAL if state.board[idx] is None]
 
     # Place tokens from shuffled list onto empty slots in SPIRAL order
-    # (up to min(len(tokens), len(empty_slots)))
-    board = list(state.board)
     placed_count = min(len(token_colors), len(empty_indices))
     for i in range(placed_count):
-        board[empty_indices[i]] = token_colors[i]
+        state = _update_board(state, empty_indices[i], token_colors[i])
 
     # New bag is empty (all tokens placed since total = 25)
-    new_bag = Tokens()
+    state = dataclasses.replace(state, bag=Tokens())
 
     # Grant opponent 1 privilege
     new_players, new_priv_supply = _grant_privilege(
@@ -610,10 +684,8 @@ def _apply_replenish(state: GameState) -> GameState:
     return dataclasses.replace(
         state,
         players=new_players,
-        board=tuple(board),
-        bag=new_bag,
         privileges_supply=new_priv_supply,
-        current_player=active,  # same player continues to MANDATORY
+        current_player=active,
         phase=Phase.MANDATORY,
     )
 
@@ -622,17 +694,13 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
     if not _is_straight_line(line) or len(line) < 1 or len(line) > 3:
         raise ValueError("line must be contiguous straight of length 1-3")
 
-    board = list(state.board)
     taken_colors: list[Color] = []
     for idx in line:
-        c = board[idx]
+        c = state.board[idx]
         if c is None or c == Color.GOLD:
             raise ValueError("cannot take gold or empty cell")
         taken_colors.append(c)
-    new_board_list = list(board)
-    for idx in line:
-        new_board_list[idx] = None
-    new_board = tuple(new_board_list)
+        state = _remove_from_board(state, idx)
 
     active = state.current_player
     ap = state.players[active]
@@ -646,6 +714,7 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
         gold=sum(1 for c in taken_colors if c == Color.GOLD),
     )
     new_ap = dataclasses.replace(ap, tokens=ap.tokens + taken_tokens)
+    state = _replace_player(state, active, new_ap)
 
     penalty = False
     color_counts = _count_color_in_tokens(taken_colors)
@@ -656,22 +725,16 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
     if color_counts.get(Color.PEARL, 0) >= 2:
         penalty = True
 
-    new_players_list = list(state.players)
-    new_players_list[active] = new_ap
-    new_players = (new_players_list[0], new_players_list[1])
-
     new_priv_supply = state.privileges_supply
     if penalty:
         opp = 1 - active
         new_players, new_priv_supply = _grant_privilege(
-            new_players , opp, state.privileges_supply
+            state.players, opp, state.privileges_supply
         )
+        state = dataclasses.replace(state, players=new_players, privileges_supply=new_priv_supply)
 
     return dataclasses.replace(
         state,
-        players=new_players,
-        board=new_board,
-        privileges_supply=new_priv_supply,
         current_player=1 - state.current_player,
         phase=Phase.USE_PRIVILEGES,
     )
