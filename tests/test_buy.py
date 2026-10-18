@@ -6,7 +6,10 @@ import pytest
 
 from splendor_duel_engine.engine.actions import (
     BuyCard,
+    DoneWithPrivileges,
+    DoneWithReplenish,
     PayTokens,
+    Replenish,
     ReserveCard,
     _can_afford,
     _remaining_cost_after_bonuses,
@@ -454,22 +457,93 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
     assert len(reserve_actions) > 0
     st2 = apply(st, reserve_actions[0])
 
-    # Player should now have gold in hand
+    # Player 0 should now have gold in hand
     assert st2.players[0].tokens.gold == 1
     assert len(st2.players[0].reserved) == 1
-    st2.players[0].reserved[0]
+    reserved_card = st2.players[0].reserved[0]
 
-    # Turn passed to opponent, now opponent's turn
-    # But we want to test the chain, so let's set up for the original player to buy
-    # Actually, after reserve, turn passes. Let's just verify the gold went to hand.
+    # Give player 0 enough gold to buy the reserved card (cost varies, give plenty)
+    st2 = replace(
+        st2,
+        players=(
+            replace(st2.players[0], tokens=Tokens(gold=15)),
+            st2.players[1],
+        ),
+    )
 
-    # Now simulate opponent doing something simple, then back to player
-    # This is complex; the key assertion is that gold moves: board -> hand -> bag -> board
-    # We'll test a simplified version
+    # Turn passed to player 1 (opponent)
+    assert st2.current_player == 1
+    assert st2.phase == Phase.USE_PRIVILEGES
 
-    # After reserve, gold is in hand. Now if player buys with that gold:
-    # (Need to get back to player's turn)
-    # Integration test - structure verified above
+    # Opponent does a simple take tokens action to pass turn back
+    # Opponent is in USE_PRIVILEGES phase, must go through to MANDATORY
+    # Give opponent a valid line of tokens (indices 1, 2, 3 in a row)
+    board_p1 = list(st2.board)
+    board_p1[1] = Color.RED
+    board_p1[2] = Color.RED
+    board_p1[3] = Color.RED
+    st2 = replace(st2, board=tuple(board_p1))
+
+    # Opponent: DoneWithPrivileges -> REPLENISH phase
+    st2 = apply(st2, DoneWithPrivileges())
+    # Opponent: DoneWithReplenish -> MANDATORY phase (bag is empty in this test setup)
+    st2 = apply(st2, DoneWithReplenish())
+
+    dp_p1 = decide(st2)
+    take_actions = [a for a in dp_p1.legal_actions if hasattr(a, "line")]
+    assert len(take_actions) > 0
+    st3 = apply(st2, take_actions[0])
+
+    # Turn should be back to player 0
+    assert st3.current_player == 0
+    assert st3.phase == Phase.USE_PRIVILEGES
+
+    # Player 0 can now buy the reserved card using the gold
+    # Need to advance past USE_PRIVILEGES and REPLENISH to MANDATORY
+    st4 = apply(st3, DoneWithPrivileges())
+    st4 = apply(st4, DoneWithReplenish())
+
+    # Now in MANDATORY, buy the reserved card
+    dp4 = decide(st4)
+    buy_actions = [
+        a
+        for a in dp4.legal_actions
+        if isinstance(a, BuyCard) and a.card_id == reserved_card.card.id
+    ]
+    assert len(buy_actions) == 1
+    st5 = apply(st4, buy_actions[0])
+    assert st5.phase == Phase.CHOOSE_PAYMENT
+
+    # Pay with the gold token
+    dp5 = decide(st5)
+    pay_actions = [a for a in dp5.legal_actions if isinstance(a, PayTokens)]
+    # Find a payment that uses gold
+    gold_pay = None
+    for pay in pay_actions:
+        if pay.payment.gold > 0:
+            gold_pay = pay
+            break
+    assert gold_pay is not None, "Should have a payment using gold"
+    st6 = apply(st5, gold_pay)
+
+    # Gold should have moved from hand to bag (player spent some gold)
+    assert st6.players[0].tokens.gold < 15  # Started with 15, spent some
+    assert st6.bag.gold >= 1  # At least 1 gold went to bag
+
+    # Now simulate a replenish to put gold back on board
+    # Empty some board spaces
+    board_empty = [None] * 25
+    st6 = replace(
+        st6, board=tuple(board_empty), current_player=0, phase=Phase.USE_PRIVILEGES
+    )
+    st7 = apply(st6, DoneWithPrivileges())
+    st8 = apply(st7, Replenish())  # Replenish from bag (which has gold)
+
+    # Gold should be on the board now (since bag had gold and board was empty)
+    gold_on_board = sum(1 for c in st8.board if c == Color.GOLD)
+    assert gold_on_board >= 1, (
+        "Gold from bag should be placed on board during replenish"
+    )
 
 
 if __name__ == "__main__":

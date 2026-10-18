@@ -183,7 +183,10 @@ def _count_color_in_tokens(tokens_taken: list[Color]) -> dict[Color, int]:
 
 
 def _remaining_cost_after_bonuses(card_cost: Tokens, bonus: Tokens) -> Tokens:
-    """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced)."""
+    """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced).
+
+    Gold is never a card cost per the rules; it is only a wild payment token.
+    """
     return Tokens(
         white=max(0, card_cost.white - bonus.white),
         blue=max(0, card_cost.blue - bonus.blue),
@@ -212,22 +215,39 @@ def _can_afford(remaining_cost: Tokens, payment: Tokens) -> bool:
 def _enumerate_legal_payments(
     remaining_cost: Tokens, player_tokens: Tokens
 ) -> list[Tokens]:
-    """Enumerate all legal payment combinations from player's tokens."""
+    """Enumerate all legal payment combinations from player's tokens.
+
+    For each combination of colored tokens and pearls, only the minimum gold
+    needed to cover the deficit is yielded. Using excess gold is never beneficial
+    and would bloat the action space. Complexity: O(prod(remaining_cost[c]+1))
+    for colored tokens, which is small since costs are bounded (max ~6 per color).
+    """
     legal: list[Tokens] = []
 
-    # For each possible amount of gold to use (0 to player_tokens.gold)
-    for gold_used in range(player_tokens.gold + 1):
-        # Let's iterate over possible colored token spending
-        for w in range(min(player_tokens.white, remaining_cost.white) + 1):
-            for b in range(min(player_tokens.blue, remaining_cost.blue) + 1):
-                for g in range(min(player_tokens.green, remaining_cost.green) + 1):
-                    for r in range(min(player_tokens.red, remaining_cost.red) + 1):
-                        for bl in range(
-                            min(player_tokens.black, remaining_cost.black) + 1
+    # Iterate over possible colored token and pearl spending
+    for w in range(min(player_tokens.white, remaining_cost.white) + 1):
+        for b in range(min(player_tokens.blue, remaining_cost.blue) + 1):
+            for g in range(min(player_tokens.green, remaining_cost.green) + 1):
+                for r in range(min(player_tokens.red, remaining_cost.red) + 1):
+                    for bl in range(min(player_tokens.black, remaining_cost.black) + 1):
+                        for p in range(
+                            min(player_tokens.pearl, remaining_cost.pearl) + 1
                         ):
-                            for p in range(
-                                min(player_tokens.pearl, remaining_cost.pearl) + 1
+                            # Compute minimum gold needed for this colored combination
+                            deficit = 0
+                            for color, paid in (
+                                (Color.WHITE, w),
+                                (Color.BLUE, b),
+                                (Color.GREEN, g),
+                                (Color.RED, r),
+                                (Color.BLACK, bl),
                             ):
+                                needed = remaining_cost.count(color)
+                                deficit += max(0, needed - paid)
+                            deficit += max(0, remaining_cost.pearl - p)
+
+                            # Only yield if we have enough gold and it's within player's gold
+                            if deficit <= player_tokens.gold:
                                 payment = Tokens(
                                     white=w,
                                     blue=b,
@@ -235,19 +255,26 @@ def _enumerate_legal_payments(
                                     red=r,
                                     black=bl,
                                     pearl=p,
-                                    gold=gold_used,
+                                    gold=deficit,
                                 )
-                                if _can_afford(remaining_cost, payment):
-                                    legal.append(payment)
+                                legal.append(payment)
 
-    # Deduplicate
+    # Deduplicate (should not be needed now, but kept for safety)
     unique = []
     seen = set()
-    for p in legal:
-        key = (p.white, p.blue, p.green, p.red, p.black, p.pearl, p.gold)
+    for payment in legal:
+        key = (
+            payment.white,
+            payment.blue,
+            payment.green,
+            payment.red,
+            payment.black,
+            payment.pearl,
+            payment.gold,
+        )
         if key not in seen:
             seen.add(key)
-            unique.append(p)
+            unique.append(payment)
     return unique
 
 
@@ -296,30 +323,30 @@ def _get_buyable_cards(state: GameState) -> list[tuple[str, Card, str]]:
     """Return list of (card_id, card, source) for cards the active player can buy.
 
     Source is "reserved" or "pyramid" with row/col encoded.
+    Deduplicates by card_id, preferring reserved source (since a card cannot
+    be in both places simultaneously in a valid state, but we guard anyway).
     """
     active = state.current_player
     ap = state.players[active]
     bonus = ap.bonus
 
-    buyable: list[tuple[str, Card, str]] = []
+    buyable: dict[str, tuple[Card, str]] = {}  # card_id -> (card, source)
 
-    # Own reserved cards
+    # Own reserved cards (checked first, so they take precedence)
     for reserved in ap.reserved:
         card = reserved.card
         remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-        # Check if affordable with current tokens + gold
         if _can_afford(remaining, ap.tokens):
-            # Multicolor restriction: must have at least one colored bonus
             if card.is_multicolor:
                 has_colored_bonus = any(bonus.count(c) > 0 for c in GEM_COLORS)
                 if not has_colored_bonus:
                     continue
-            buyable.append((card.id, card, "reserved"))
+            buyable[card.id] = (card, "reserved")
 
     # Pyramid cards
     for row_idx, row in enumerate(state.pyramid):
         for col_idx, card in enumerate(row):
-            if card is not None:
+            if card is not None and card.id not in buyable:
                 remaining = _remaining_cost_after_bonuses(card.cost, bonus)
                 if _can_afford(remaining, ap.tokens):
                     if card.is_multicolor:
@@ -327,9 +354,9 @@ def _get_buyable_cards(state: GameState) -> list[tuple[str, Card, str]]:
                         if not has_colored_bonus:
                             continue
                     source = f"pyramid_{row_idx}_{col_idx}"
-                    buyable.append((card.id, card, source))
+                    buyable[card.id] = (card, source)
 
-    return buyable
+    return [(cid, card, source) for cid, (card, source) in buyable.items()]
 
 
 def _grant_privilege(
@@ -717,12 +744,16 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     winner = None
     if new_ap.prestige >= 20 or new_ap.crowns >= 10:
         winner = active
-    # 10 points in a single color
+    # 10 points in a single color (spec: multicolor cards count as their chosen color;
+    # colorless no-bonus cards and royals do not count)
     for color in GEM_COLORS:
-        # Count points from cards with this bonus color
-        color_points = sum(
-            pc.card.points for pc in new_ap.purchased if pc.card.bonus == color
-        )
+        color_points = 0
+        for pc in new_ap.purchased:
+            if pc.card.is_multicolor:
+                if pc.chosen_color == color:
+                    color_points += pc.card.points
+            elif pc.card.bonus == color:
+                color_points += pc.card.points
         if color_points >= 10:
             winner = active
             break
