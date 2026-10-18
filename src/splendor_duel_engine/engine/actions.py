@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from splendor_duel_engine.engine.board import SPIRAL
@@ -513,141 +512,6 @@ def _grant_privilege(
 # ===== Ability resolution chain =====
 
 
-def _resolve_abilities(state: GameState, card: Card, active: int, start_idx: int = 0) -> tuple[GameState, bool]:
-    """Orchestrate ability resolution in fixed order after a card purchase.
-    
-    Each resolver returns (new_state, should_pause). If should_pause is True,
-    a decision point phase was entered and the chain stops until the decision
-    handler calls _resume_abilities.
-    """
-    # Define resolvers in order: (ability_enum, resolver_fn)
-    # None for multicolor since it's a card property, not an Ability
-    resolvers: list[tuple[Ability | None, Callable[[GameState, Card, int], tuple[GameState, bool]]]] = [
-        (None, _resolve_multicolor),
-        (Ability.STEAL_TOKEN, _resolve_steal_token),
-        (Ability.TAKE_MATCHING_TOKEN, _resolve_take_matching_token),
-        (Ability.PRIVILEGE, _resolve_privilege),
-        (Ability.EXTRA_TURN, _resolve_extra_turn),
-    ]
-    
-    for i in range(start_idx, len(resolvers)):
-        _ability, resolver = resolvers[i]
-        state, should_pause = resolver(state, card, active)
-        if should_pause:
-            return state, True
-    
-    return state, False
-
-
-def _resolve_multicolor(state: GameState, card: Card, active: int) -> tuple[GameState, bool]:
-    """Enter MULTICOLOR_COLOR phase for a multicolor card. Returns (state, should_pause)."""
-    if not card.is_multicolor:
-        return state, False
-    
-    ap = state.players[active]
-    # Determine which colors are available (bonus.count > 0)
-    available_colors = [c for c in GEM_COLORS if ap.bonus.count(c) > 0]
-    if not available_colors:
-        # Should not happen if buy was validated, but continue chain to steal_token
-        return state, False
-    
-    # Keep pending_buy so we know which card to update after color choice
-    return dataclasses.replace(
-        state,
-        phase=Phase.MULTICOLOR_COLOR,
-        pending_ability=None,
-    ), True
-
-
-def _resolve_steal_token(state: GameState, card: Card, active: int) -> tuple[GameState, bool]:
-    """Enter STEAL_TOKEN phase if card has the ability and opponent has stealable tokens."""
-    if card.ability != Ability.STEAL_TOKEN:
-        return state, False
-
-    opp = 1 - active
-    opp_tokens = state.players[opp].tokens
-    # Non-gold colors opponent has
-    stealable_colors = [c for c in GEM_COLORS if opp_tokens.count(c) > 0]
-    if not stealable_colors:
-        # No tokens to steal, continue to next ability
-        return state, False
-
-    return dataclasses.replace(
-        state,
-        phase=Phase.STEAL_TOKEN,
-        pending_ability=Ability.STEAL_TOKEN,
-    ), True
-
-
-def _resolve_take_matching_token(
-    state: GameState, card: Card, active: int
-) -> tuple[GameState, bool]:
-    """TAKE_MATCHING_TOKEN: auto-take 1 board token of card's bonus color if present."""
-    if card.ability != Ability.TAKE_MATCHING_TOKEN:
-        return state, False
-
-    if card.bonus is None:
-        return state, False
-
-    # Find first token of card's bonus color on board
-    bonus_color = card.bonus
-    board = list(state.board)
-    for idx, color in enumerate(board):
-        if color == bonus_color:
-            # Take it
-            board[idx] = None
-            new_board = tuple(board)
-            taken = Tokens(**{bonus_color.value: 1})
-            new_players = list(state.players)
-            new_players[active] = dataclasses.replace(
-                state.players[active], tokens=state.players[active].tokens + taken
-            )
-            state = dataclasses.replace(
-                state,
-                players=tuple(new_players),
-                board=new_board,
-            )
-            break
-    return state, False
-
-
-def _resolve_privilege(state: GameState, card: Card, active: int) -> tuple[GameState, bool]:
-    """PRIVILEGE: grant privilege via _grant_privilege."""
-    if card.ability != Ability.PRIVILEGE:
-        return state, False
-
-    new_players, new_priv_supply = _grant_privilege(
-        state.players, active, state.privileges_supply
-    )
-    return dataclasses.replace(
-        state,
-        players=new_players,
-        privileges_supply=new_priv_supply,
-    ), False
-
-
-def _resolve_extra_turn(state: GameState, card: Card, active: int) -> tuple[GameState, bool]:
-    """EXTRA_TURN: set extra_turn=True."""
-    if card.ability != Ability.EXTRA_TURN:
-        # No more abilities, go to USE_PRIVILEGES
-        return dataclasses.replace(
-            state,
-            current_player=active,
-            phase=Phase.USE_PRIVILEGES,
-            extra_turn=False,
-            pending_buy=None,  # Clear pending_buy - purchase fully complete
-        ), False
-
-    # Set extra_turn flag, stay in USE_PRIVILEGES for same player
-    return dataclasses.replace(
-        state,
-        current_player=active,
-        phase=Phase.USE_PRIVILEGES,
-        extra_turn=True,
-        pending_buy=None,  # Clear pending_buy - purchase fully complete
-    ), False
-
-
 def _apply_use_privilege(state: GameState, index: int) -> GameState:
     active = state.current_player
     ap = state.players[active]
@@ -1040,7 +904,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             winner = active
             break
 
-    # Start ability resolution chain
+    # Start ability resolution: check multicolor first
     if winner is not None:
         # Game over, no abilities resolve
         return dataclasses.replace(
@@ -1055,33 +919,126 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             phase=Phase.GAME_OVER,
         )
 
-    # Use the new orchestrator which returns (state, should_pause)
-    new_state = dataclasses.replace(
-        state,
-        players=tuple(new_players_list),
-        bag=new_bag,
-        pyramid=tuple(tuple(row) for row in new_pyramid),
-        decks=tuple(tuple(d) for d in new_decks),
-        pending_buy=pending_action,  # Keep for multicolor resolution
-        winner=None,
-        current_player=active,
-        phase=Phase.USE_PRIVILEGES,  # Will be overridden by resolution
-        extra_turn=False,
-        pending_ability=None,
+    # Handle multicolor first (separate from abilities)
+    if card.is_multicolor:
+        return dataclasses.replace(
+            state,
+            players=tuple(new_players_list),
+            bag=new_bag,
+            pyramid=tuple(tuple(row) for row in new_pyramid),
+            decks=tuple(tuple(d) for d in new_decks),
+            pending_buy=pending_action,
+            winner=None,
+            current_player=active,
+            phase=Phase.MULTICOLOR_COLOR,
+            extra_turn=False,
+            pending_ability=None,
+        )
+
+    # Not multicolor: resolve abilities directly
+    return _resolve_abilities(
+        dataclasses.replace(
+            state,
+            players=tuple(new_players_list),
+            bag=new_bag,
+            pyramid=tuple(tuple(row) for row in new_pyramid),
+            decks=tuple(tuple(d) for d in new_decks),
+            pending_buy=None,
+            winner=None,
+            current_player=active,
+            phase=Phase.USE_PRIVILEGES,
+            extra_turn=False,
+            pending_ability=None,
+        ),
+        card,
+        active,
     )
-    new_state, _should_pause = _resolve_abilities(new_state, card, active)
-    return new_state
 
 
-def _resume_abilities(state: GameState, start_idx: int) -> GameState:
-    """Resume ability resolution after a decision point (multicolor/steal choice)."""
-    pending_action = state.pending_buy
-    if pending_action is None:
-        raise ValueError("no pending card to resume abilities for")
-    card = pending_action.card
-    active = state.current_player
-    new_state, _should_pause = _resolve_abilities(state, card, active, start_idx)
-    return new_state
+def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
+    """Resolve the card's single ability (if any). Returns final state."""
+    # Clear pending_buy - purchase fully complete
+    state = dataclasses.replace(state, pending_buy=None)
+    
+    match card.ability:
+        case Ability.STEAL_TOKEN:
+            opp = 1 - active
+            opp_tokens = state.players[opp].tokens
+            stealable_colors = [c for c in GEM_COLORS if opp_tokens.count(c) > 0]
+            if stealable_colors:
+                return dataclasses.replace(
+                    state,
+                    phase=Phase.STEAL_TOKEN,
+                    pending_ability=Ability.STEAL_TOKEN,
+                )
+            # No tokens to steal → normal turn end
+            return _normal_turn_end(state, active)
+
+        case Ability.TAKE_MATCHING_TOKEN:
+            return _run_take_matching_token(state, card, active)
+
+        case Ability.PRIVILEGE:
+            return _run_privilege(state, card, active)
+
+        case Ability.EXTRA_TURN:
+            return _run_extra_turn(state, card, active)
+
+        case None:
+            return _normal_turn_end(state, active)
+
+
+def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameState:
+    if card.bonus is not None:
+        bonus_color = card.bonus
+        board = list(state.board)
+        for idx, color in enumerate(board):
+            if color == bonus_color:
+                board[idx] = None
+                new_board = tuple(board)
+                taken = Tokens(**{bonus_color.value: 1})
+                new_players = list(state.players)
+                new_players[active] = dataclasses.replace(
+                    state.players[active], tokens=state.players[active].tokens + taken
+                )
+                state = dataclasses.replace(
+                    state,
+                    players=tuple(new_players),
+                    board=new_board,
+                )
+                break
+    return _normal_turn_end(state, active)
+
+
+def _run_privilege(state: GameState, card: Card, active: int) -> GameState:
+    new_players, new_priv_supply = _grant_privilege(
+        state.players, active, state.privileges_supply
+    )
+    return _normal_turn_end(
+        dataclasses.replace(
+            state,
+            players=new_players,
+            privileges_supply=new_priv_supply,
+        ),
+        active,
+    )
+
+
+def _run_extra_turn(state: GameState, card: Card, active: int) -> GameState:
+    return dataclasses.replace(
+        state,
+        current_player=active,
+        phase=Phase.USE_PRIVILEGES,
+        extra_turn=True,
+    )
+
+
+def _normal_turn_end(state: GameState, active: int) -> GameState:
+    return dataclasses.replace(
+        state,
+        current_player=active,
+        phase=Phase.USE_PRIVILEGES,
+        extra_turn=False,
+    )
 
 
 def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
@@ -1097,7 +1054,6 @@ def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
     # Update the purchased card's chosen_color
     ap = state.players[active]
     purchased_list = list(ap.purchased)
-    # The last purchased card is the multicolor one
     last_pc = purchased_list[-1]
     if last_pc.card.id != card.id:
         raise ValueError("purchased card mismatch")
@@ -1111,14 +1067,15 @@ def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
     new_players = list(state.players)
     new_players[active] = new_ap
 
-    # Resume ability chain after decision point (start from index 1 = steal_token)
-    return _resume_abilities(
+    # After multicolor: resolve abilities directly
+    return _resolve_abilities(
         dataclasses.replace(
             state,
             players=tuple(new_players),
             pending_ability=None,
         ),
-        1  # start from steal_token (index 1)
+        card,
+        active,
     )
 
 
@@ -1150,12 +1107,12 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
     new_players[active] = new_active
     new_players[opp] = new_opp
 
-    # Resume ability chain after decision point (start from index 2 = take_matching_token)
-    return _resume_abilities(
+    # After steal: normal turn end (no other abilities on steal cards)
+    return _normal_turn_end(
         dataclasses.replace(
             state,
             players=tuple(new_players),
             pending_ability=None,
         ),
-        2  # start from take_matching_token (index 2)
+        active,
     )
