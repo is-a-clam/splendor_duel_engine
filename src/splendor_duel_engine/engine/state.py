@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.cards import Card, RoyalCard, load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.phase import Phase
 
 #: ``(row_length, deck_index)`` for the ``pyramid`` rows in order (level 3,
 #: level 2, level 1). ``decks`` is stored in the same order — index 0/1/2 is
@@ -94,6 +95,8 @@ class GameState:
     privileges_supply: int
     current_player: int
     winner: int | None
+    phase: Phase
+    pending: Card | None
     #: Excluded from equality/repr: two games from the same seed compare equal
     #: even though their RNG streams are separate objects.
     rng: random.Random = field(compare=False, repr=False)
@@ -135,19 +138,9 @@ def new_game(seed: int) -> GameState:
     # (d) Pick the first player.
     current_player = rng.randrange(2)
 
-    players = tuple(
-        PlayerState(
-            tokens=Tokens(),
-            # Bonus holds gem counts only; pearl/gold bonuses are impossible
-            # in the card data, so they stay 0 (invariant for Task 6).
-            bonus=Tokens(),
-            prestige=0,
-            crowns=0,
-            reserved=(),
-            purchased=(),
-            privileges=1 if seat != current_player else 0,  # second player
-        )
-        for seat in range(2)
+    players = (
+        _fresh_player(0 if current_player == 0 else 1),
+        _fresh_player(0 if current_player == 1 else 1),
     )
 
     return GameState(
@@ -160,5 +153,21 @@ def new_game(seed: int) -> GameState:
         privileges_supply=_TOTAL_PRIVILEGES - 1,  # second player took one
         current_player=current_player,
         winner=None,
+        phase=Phase.MANDATORY,
+        pending=None,
         rng=rng,
+    )
+
+
+def _fresh_player(privileges: int) -> PlayerState:
+    return PlayerState(
+        tokens=Tokens(),
+        # Bonus holds gem counts only; pearl/gold bonuses are impossible
+        # in the card data, so they stay 0 (invariant for Task 6).
+        bonus=Tokens(),
+        prestige=0,
+        crowns=0,
+        reserved=(),
+        purchased=(),
+        privileges=privileges,
     )
