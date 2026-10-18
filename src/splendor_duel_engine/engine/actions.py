@@ -904,39 +904,31 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         if action.payment.count(color) > ap.tokens.count(color):
             raise ValueError(f"payment exceeds tokens for {color}")
 
-    # Move spent tokens to bag
-    new_bag_dict = {color.value: state.bag.count(color) for color in Color}
-    for color in Color:
-        new_bag_dict[color.value] += action.payment.count(color)
-    new_bag = Tokens(**new_bag_dict)
+    # Move spent tokens to bag (use helper)
+    state = _add_to_bag(state, action.payment)
 
     # Remove tokens from player
     new_tokens = ap.tokens - action.payment
     new_ap = dataclasses.replace(ap, tokens=new_tokens)
 
-    # Remove card from source and update pyramid/decks in one unified logic
-    new_players_list = list(state.players)
-    new_pyramid = [list(row) for row in state.pyramid]
-    new_decks = [list(d) for d in state.decks]
-
+    # Remove card from source and update pyramid/decks
     if source == "reserved":
         # Remove from reserved
         for i, reserved in enumerate(ap.reserved):
             if reserved.card.id == card.id:
                 new_reserved = ap.reserved[:i] + ap.reserved[i + 1 :]
                 new_ap = dataclasses.replace(new_ap, reserved=new_reserved)
-                new_players_list[active] = new_ap
                 break
     elif source.startswith("pyramid_"):
         parts = source.split("_")
         row_idx = int(parts[1])
         col_idx = int(parts[2])
-        new_pyramid[row_idx][col_idx] = None
+        # Use helper to pop pyramid and refill from deck
+        card_from_pyramid, state = _pop_pyramid(state, row_idx, col_idx)
+        if card_from_pyramid.id != card.id:
+            raise ValueError(f"card {card.id} not at pyramid source")
         # Refill from corresponding deck
-        deck = new_decks[row_idx]
-        if deck:
-            new_pyramid[row_idx][col_idx] = deck.pop()
-        new_players_list[active] = new_ap
+        state = _refill_pyramid_from_deck(state, row_idx, col_idx)
     else:
         raise ValueError(f"unknown buy source: {source}")
 
@@ -955,7 +947,9 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         prestige=new_ap.prestige + card.points,
         crowns=new_ap.crowns + card.crowns,
     )
-    new_players_list[active] = new_ap
+
+    # Update player state
+    state = _replace_player(state, active, new_ap)
 
     # Check win conditions
     winner = None
@@ -980,10 +974,6 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         # Game over, no abilities resolve
         return dataclasses.replace(
             state,
-            players=tuple(new_players_list),
-            bag=new_bag,
-            pyramid=tuple(tuple(row) for row in new_pyramid),
-            decks=tuple(tuple(d) for d in new_decks),
             pending_buy=None,
             winner=winner,
             current_player=active,
@@ -994,10 +984,6 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     if card.is_multicolor:
         return dataclasses.replace(
             state,
-            players=tuple(new_players_list),
-            bag=new_bag,
-            pyramid=tuple(tuple(row) for row in new_pyramid),
-            decks=tuple(tuple(d) for d in new_decks),
             pending_buy=pending_action,
             winner=None,
             current_player=active,
@@ -1010,10 +996,6 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     return _resolve_abilities(
         dataclasses.replace(
             state,
-            players=tuple(new_players_list),
-            bag=new_bag,
-            pyramid=tuple(tuple(row) for row in new_pyramid),
-            decks=tuple(tuple(d) for d in new_decks),
             pending_buy=pending_action,
             winner=None,
             current_player=active,
