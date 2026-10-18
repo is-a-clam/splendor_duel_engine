@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine.board import SPIRAL
-from splendor_duel_engine.engine.cards import Card, RoyalCard, load_cards
+from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard, load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 
@@ -105,6 +105,12 @@ class GameState:
     #: Excluded from equality/repr: two games from the same seed compare equal
     #: even though their RNG streams are separate objects.
     rng: random.Random = field(compare=False, repr=False)
+    #: True when the current player has earned an extra turn (via EXTRA_TURN
+    #: ability or royal). Cleared when the extra turn is consumed.
+    extra_turn: bool = False
+    #: Stores the ability being resolved during a decision point phase
+    #: (STEAL_TOKEN). None otherwise.
+    pending_ability: Ability | None = None
 
 
 def new_game(seed: int) -> GameState:
@@ -162,6 +168,8 @@ def new_game(seed: int) -> GameState:
         pending_buy=None,
         pending_reserve=None,
         rng=rng,
+        extra_turn=False,
+        pending_ability=None,
     )
 
 

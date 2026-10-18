@@ -82,3 +82,12 @@ Task 4: minor (deferred): `.vscode/settings.json` was committed; removed from in
 
 Task 5: complete (commits 24e4df6..e0e8722, review clean after 1 fix round)
 Task 5: minor (deferred): Payment enumeration complexity noted; win condition per-color check iterates purchased cards each time (could cache). No functional issues.
+
+**Post-Task 5 Refactoring** (commit b2f5348): Complete refactor of actions.py per code review feedback:
+- `UsePrivilege` now index-based (not color-based)
+- `BuyCard` includes full Card and source
+- New `CHOOSE_GOLD` phase for reserve gold selection
+- `pending` → `pending_buy` + `pending_reserve`
+- `_apply_take_tokens` uses `_grant_privilege`
+- `_apply_replenish` uses RNG for token draw, SPIRAL order for placement
+- All 64 tests pass, lint clean
