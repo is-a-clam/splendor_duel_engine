@@ -726,3 +726,37 @@ Run: `uv run pytest -v && uv run ruff check .` — expected: all PASS, including
 ```bash
 git add -A && git commit -m "feat: seeded random-play invariant fuzz harness"
 ```
+
+---
+
+## Future Notes / Refactoring Ideas
+
+These are not required for the current plan but should be considered for future improvements:
+
+### 1. Type-safe tuple construction for players (from code review)
+**Pattern**: In `_grant_privilege` (actions.py:374), new players tuples are created as:
+```python
+new_players = [players[0], players[1]]
+```
+This is more type-safe than the common pattern:
+```python
+new_players_list = list(state.players)
+new_players_list[active] = new_ap
+players=tuple(new_players_list),
+```
+**Reason**: Direct indexing (`[0]`, `[1]`) makes it explicit that we're working with a 2-element tuple, catches index errors at edit time, and avoids the `list` → `tuple` round-trip. Apply this pattern consistently when modifying `state.players` (which is always `tuple[PlayerState, PlayerState]`).
+
+### 2. Consider extracting `_replace_player(state, player_idx, new_player_state) -> GameState` helper
+Many functions do the same `list(state.players)` → modify → `tuple(...)` → `dataclasses.replace(state, players=...)`. A small helper would reduce boilerplate and ensure consistency.
+
+### 3. Add `extra_turn` handling to `USE_PRIVILEGES` → `REPLENISH` → `MANDATORY` transition logic
+Currently `extra_turn` is consumed in `DoneWithReplenish`. If we add more phases before `USE_PRIVILEGES` (e.g., discard), ensure the flag is still consumed correctly.
+
+### 4. Payment enumeration optimization (Task 5 minor)
+The brute-force `_enumerate_legal_payments` with 6 nested loops is correct but could be optimized for larger token counts. Not a bottleneck yet.
+
+### 5. Win condition per-color check caching (Task 5 minor)
+The "10 points in single color" win check iterates all purchased cards each time. Could cache per-color points in `PlayerState` for O(1) check. Not a bottleneck yet.
+
+### 6. Agents module scaffolding (post-Task 10)
+The `tests/agents/` directory was removed as it referenced `engine.observation` (Task 9). Re-add when implementing agents (Task 11+).

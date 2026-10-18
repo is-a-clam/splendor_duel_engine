@@ -10,7 +10,7 @@ Branch: feat/python-engine (repo git-initialized this session; baseline commit 4
 - [x] Task 3: Step API and take-tokens action
 - [x] Task 4: Privileges, replenish, forced replenish
 - [x] Task 5: Reserve and buy (with payment step)
-- [ ] Task 6: Card abilities and multicolor accounting
+- [x] Task 6: Card abilities and multicolor accounting
 - [ ] Task 7: Royal cards at 3rd and 6th crowns
 - [ ] Task 8: End-of-turn sequence and win conditions
 - [ ] Task 9: Observation API (hidden information)
@@ -91,3 +91,6 @@ Task 5: minor (deferred): Payment enumeration complexity noted; win condition pe
 - `_apply_take_tokens` uses `_grant_privilege`
 - `_apply_replenish` uses RNG for token draw, SPIRAL order for placement
 - All 64 tests pass, lint clean
+
+Task 6: complete (commits 9f906c2..cff57d6, review clean after 2 fix rounds)
+Task 6: minor (deferred): `tests/agents/test_base.py` historical deletion (agents module not yet implemented); not blocking.
