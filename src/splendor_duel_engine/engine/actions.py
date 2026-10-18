@@ -1,30 +1,27 @@
-"""Game actions and decision logic (Step API).
-
-Spec: docs/specs/splendor-duel-rules.md — Turn structure (A. Take tokens) and
-Privileges (penalty source when supply empty).
-"""
-
+"""Game actions and decision logic (Step API)."""
 from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 
-# Board size
-_BOARD_SIZE = 25
+if TYPE_CHECKING:
+    from splendor_duel_engine.engine.state import GameState
 
-#: 8 directions (row-major steps) for straight lines on 5x5.
+
+_BOARD_SIZE = 25
 _DIRECTIONS_8 = (
-    (1, 0),  # right
-    (1, 1),  # down-right
-    (0, 1),  # down
-    (-1, 1),  # down-left
-    (-1, 0),  # left
-    (-1, -1),  # up-left
-    (0, -1),  # up
-    (1, -1),  # up-right
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+    (0, -1),
+    (1, -1),
 )
 
 
@@ -118,12 +115,12 @@ class DecisionPoint:
     legal_actions: tuple[Action, ...]
 
 
-def _index_to_rc(idx: int) -> tuple[int, int]:
-    return idx // 5, idx % 5
+def _index_to_rc(index: int) -> tuple[int, int]:
+    return index // 5, index % 5
 
 
 def _rc_to_index(r: int, c: int) -> int | None:
-    if r < 0 or r > 4 or c < 0 or c > 4:
+    if r < 0 or r >= 5 or c < 0 or c >= 5:
         return None
     return r * 5 + c
 
@@ -157,107 +154,104 @@ def _legal_take_token_lines(board: tuple[Color | None, ...]) -> list[tuple[int, 
             r, c = _index_to_rc(start)
             r2, c2 = r + dr, c + dc
             idx2 = _rc_to_index(r2, c2)
-            if idx2 is None:
-                continue
-            if board[idx2] is not None and board[idx2] != Color.GOLD:
-                line2 = (start, idx2)
-                if _is_straight_line(line2):
-                    result.add(line2)
+            if idx2 is not None and board[idx2] is not None and board[idx2] != Color.GOLD:
+                result.add((start, idx2))
                 r3, c3 = r + dr * 2, c + dc * 2
                 idx3 = _rc_to_index(r3, c3)
-                if (
-                    idx3 is not None
-                    and board[idx3] is not None
-                    and board[idx3] != Color.GOLD
-                ):
-                    line3 = (start, idx2, idx3)
-                    if _is_straight_line(line3):
-                        result.add(line3)
+                if idx3 is not None and board[idx3] is not None and board[idx3] != Color.GOLD:
+                    result.add((start, idx2, idx3))
     return sorted(result, key=lambda x: (len(x), x))
 
 
-def _has_penalty(taken_colors: list[Color]) -> bool:
-    if taken_colors.count(Color.PEARL) >= 2:
-        return True
-    for c in set(taken_colors):
-        if c == Color.GOLD:
-            continue
-        if taken_colors.count(c) == 3:
-            return True
-    return False
+def _count_color_in_tokens(tokens_taken: list[Color]) -> dict[Color, int]:
+    counts: dict[Color, int] = {}
+    for c in tokens_taken:
+        counts[c] = counts.get(c, 0) + 1
+    return counts
 
 
-def _transfer_privilege_to_opponent(state):
-    op = 1 - state.current_player
-    players = list(state.players)
-    supply = state.privileges_supply
-    if supply > 0:
-        supply = supply - 1
-        players[op] = dataclasses.replace(
-            players[op], privileges=players[op].privileges + 1
-        )
-    else:
-        # take from active player if possible
-        ap = state.current_player
-        if players[ap].privileges > 0:
-            players[ap] = dataclasses.replace(
-                players[ap], privileges=players[ap].privileges - 1
-            )
-            players[op] = dataclasses.replace(
-                players[op], privileges=players[op].privileges + 1
-            )
-    return dataclasses.replace(state, players=tuple(players), privileges_supply=supply)
+def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
+    if not _is_straight_line(line) or len(line) < 1 or len(line) > 3:
+        raise ValueError("line must be contiguous straight of length 1-3")
 
-
-def _apply_take_tokens(state, action: TakeTokens):
-    cp = state.current_player
-    players = list(state.players)
-    new_board = list(state.board)
-    taken: list[Color] = []
-    gained = Tokens()
-    for idx in action.line:
-        c = new_board[idx]
+    board = list(state.board)
+    taken_colors: list[Color] = []
+    for idx in line:
+        c = board[idx]
         if c is None or c == Color.GOLD:
-            raise ValueError
-        taken.append(c)
-        gained = gained + Tokens(
-            white=1 if c == Color.WHITE else 0,
-            blue=1 if c == Color.BLUE else 0,
-            green=1 if c == Color.GREEN else 0,
-            red=1 if c == Color.RED else 0,
-            black=1 if c == Color.BLACK else 0,
-            pearl=1 if c == Color.PEARL else 0,
-            gold=1 if c == Color.GOLD else 0,
-        )
-        new_board[idx] = None
-    players[cp] = dataclasses.replace(players[cp], tokens=players[cp].tokens + gained)
-    st = dataclasses.replace(state, board=tuple(new_board), players=tuple(players))
-    if _has_penalty(taken):
-        st = _transfer_privilege_to_opponent(st)
-    op = 1 - cp
+            raise ValueError("cannot take gold or empty cell")
+        taken_colors.append(c)
+    new_board_list = list(board)
+    for idx in line:
+        new_board_list[idx] = None
+    new_board = tuple(new_board_list)
+
+    active = state.current_player
+    ap = state.players[active]
+    taken_tokens = Tokens(
+        white=sum(1 for c in taken_colors if c == Color.WHITE),
+        blue=sum(1 for c in taken_colors if c == Color.BLUE),
+        green=sum(1 for c in taken_colors if c == Color.GREEN),
+        red=sum(1 for c in taken_colors if c == Color.RED),
+        black=sum(1 for c in taken_colors if c == Color.BLACK),
+        pearl=sum(1 for c in taken_colors if c == Color.PEARL),
+        gold=sum(1 for c in taken_colors if c == Color.GOLD),
+    )
+    new_ap = dataclasses.replace(ap, tokens=ap.tokens + taken_tokens)
+
+    penalty = False
+    color_counts = _count_color_in_tokens(taken_colors)
+    for cnt in color_counts.values():
+        if cnt >= 3:
+            penalty = True
+            break
+    if color_counts.get(Color.PEARL, 0) >= 2:
+        penalty = True
+
+    new_players_list = list(state.players)
+    new_players_list[active] = new_ap
+
+    new_priv_supply = state.privileges_supply
+    if penalty:
+        opp = 1 - active
+        opp_state = state.players[opp]
+        if state.privileges_supply > 0:
+            new_priv_supply = state.privileges_supply - 1
+            new_opp = dataclasses.replace(opp_state, privileges=opp_state.privileges + 1)
+            new_players_list[opp] = new_opp
+        else:
+            if new_ap.privileges > 0:
+                new_ap_pen = dataclasses.replace(new_ap, privileges=new_ap.privileges - 1)
+                new_opp = dataclasses.replace(opp_state, privileges=opp_state.privileges + 1)
+                new_players_list[active] = new_ap_pen
+                new_players_list[opp] = new_opp
+
     return dataclasses.replace(
-        st, current_player=op, phase=Phase.USE_PRIVILEGES, pending=None
+        state,
+        players=tuple(new_players_list),
+        board=new_board,
+        privileges_supply=new_priv_supply,
+        current_player=1 - state.current_player,
+        phase=Phase.USE_PRIVILEGES,
     )
 
 
-def decide(state) -> DecisionPoint:
+def decide(state: GameState) -> DecisionPoint:
     if state.winner is not None:
         raise ValueError("game is over")
     if state.phase == Phase.MANDATORY:
-        actions_list: list[Action] = []
-        lines = _legal_take_token_lines(state.board)
-        for line in lines:
-            actions_list.append(TakeTokens(line))
-        return DecisionPoint(phase=state.phase, legal_actions=tuple(actions_list))
+        actions: list[Action] = []
+        for line in _legal_take_token_lines(state.board):
+            actions.append(TakeTokens(line))
+        actions.sort(key=lambda a: (len(a.line), a.line) if isinstance(a, TakeTokens) else (0, ()))
+        return DecisionPoint(phase=state.phase, legal_actions=tuple(actions))
     return DecisionPoint(phase=state.phase, legal_actions=())
 
 
-def apply(state, action: Action):
+def apply(state: GameState, action: Action) -> GameState:
     dp = decide(state)
-    # check legal
-    # check membership
     if action not in dp.legal_actions:
         raise ValueError("illegal action")
     if isinstance(action, TakeTokens):
-        return _apply_take_tokens(state, action)
+        return _apply_take_tokens(state, action.line)
     return state
