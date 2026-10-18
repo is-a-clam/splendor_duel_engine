@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from splendor_duel_engine.engine.actions import (
+    ChooseGold,
     ReserveCard,
     apply,
     decide,
@@ -35,8 +36,8 @@ def test_reserve_requires_gold_on_board():
     assert len(reserve_actions) == 0
 
 
-def test_reserve_takes_gold_then_pyramid_card_and_refills():
-    """Reserve takes gold from board first, then a pyramid card (slot refills)."""
+def test_reserve_enters_choose_gold_phase():
+    """ReserveCard -> CHOOSE_GOLD phase."""
     board = [None] * 25
     board[0] = Color.GOLD  # Gold available
     board[1] = Color.RED
@@ -49,28 +50,67 @@ def test_reserve_takes_gold_then_pyramid_card_and_refills():
     reserve_actions = [a for a in dp.legal_actions if isinstance(a, ReserveCard)]
     assert len(reserve_actions) > 0
 
-    # Find a reserve action that takes from pyramid (source="pyramid")
+    # Find a reserve action that takes from pyramid
     pyramid_actions = [a for a in reserve_actions if a.source == "pyramid"]
     assert len(pyramid_actions) > 0
 
     action = pyramid_actions[0]
     st2 = apply(st, action)
 
+    # Should enter CHOOSE_GOLD phase
+    assert st2.phase is Phase.CHOOSE_GOLD
+    assert st2.pending_reserve is not None
+    # Gold should still be on board (not taken yet)
+    assert st2.board[0] == Color.GOLD
+    # Player should NOT have gold in hand yet
+    assert st2.players[0].tokens.gold == 0
+    # Player should NOT have reserved card yet
+    assert len(st2.players[0].reserved) == 0
+
+
+def test_reserve_from_pyramid_refills_slot_after_choose_gold():
+    """After ChooseGold, pyramid slot refills (if deck not empty)."""
+    board = [None] * 25
+    board[0] = Color.GOLD
+    board[1] = Color.RED
+    st = board_state(
+        current_player=0,
+        phase=Phase.MANDATORY,
+        board=tuple(board),
+    )
+    dp = decide(st)
+    reserve_actions = [a for a in dp.legal_actions if isinstance(a, ReserveCard)]
+    pyramid_actions = [a for a in reserve_actions if a.source == "pyramid"]
+    assert len(pyramid_actions) > 0
+
+    action = pyramid_actions[0]
+    st2 = apply(st, action)
+
+    # Should be in CHOOSE_GOLD phase
+    assert st2.phase is Phase.CHOOSE_GOLD
+    # Choose the gold
+    dp2 = decide(st2)
+    choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
+    assert len(choose_gold_actions) == 1
+    st3 = apply(st2, choose_gold_actions[0])
+
     # Gold should be taken from board
-    assert st2.board[0] is None
+    assert st3.board[0] is None
     # Player should have the gold in hand
-    assert st2.players[0].tokens.gold == 1
+    assert st3.players[0].tokens.gold == 1
     # Player should have a reserved card
-    assert len(st2.players[0].reserved) == 1
-    reserved_card = st2.players[0].reserved[0]
+    assert len(st3.players[0].reserved) == 1
+    reserved_card = st3.players[0].reserved[0]
     assert reserved_card.from_deck is False  # from pyramid
     # Pyramid slot should be refilled (if deck not empty)
-    # The reserved card came from pyramid row corresponding to action.index
-    # We just verify the pyramid structure is maintained
+    # Turn should pass to opponent
+    assert st3.current_player == 1
+    assert st3.phase is Phase.USE_PRIVILEGES
+    assert st3.pending_reserve is None
 
 
 def test_reserve_from_deck_top_does_not_refill():
-    """Reserve from deck top (source="deck", level) does not refill pyramid."""
+    """Reserve from deck top (source="deck_3"/"deck_2"/"deck_1") does not refill pyramid."""
     board = [None] * 25
     board[0] = Color.GOLD
     st = board_state(
@@ -86,14 +126,26 @@ def test_reserve_from_deck_top_does_not_refill():
     action = deck_actions[0]
     st2 = apply(st, action)
 
+    # Should enter CHOOSE_GOLD phase
+    assert st2.phase is Phase.CHOOSE_GOLD
+    # Choose the gold
+    dp2 = decide(st2)
+    choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
+    assert len(choose_gold_actions) == 1
+    st3 = apply(st2, choose_gold_actions[0])
+
     # Gold should be taken from board
-    assert st2.board[0] is None
+    assert st3.board[0] is None
     # Player should have the gold in hand
-    assert st2.players[0].tokens.gold == 1
+    assert st3.players[0].tokens.gold == 1
     # Player should have a reserved card from deck
-    assert len(st2.players[0].reserved) == 1
-    reserved_card = st2.players[0].reserved[0]
+    assert len(st3.players[0].reserved) == 1
+    reserved_card = st3.players[0].reserved[0]
     assert reserved_card.from_deck is True  # from deck
+    # Turn should pass to opponent
+    assert st3.current_player == 1
+    assert st3.phase is Phase.USE_PRIVILEGES
+    assert st3.pending_reserve is None
 
 
 def test_reserve_illegal_at_three_reserved():
@@ -105,25 +157,6 @@ def test_reserve_illegal_at_three_reserved():
         phase=Phase.MANDATORY,
         board=tuple(board),
     )
-    # Give player 3 reserved cards
-    st = replace(
-        base_st,
-        players=(
-            replace(
-                base_st.players[0],
-                reserved=(
-                    base_st.players[0].reserved[0]
-                    if base_st.players[0].reserved
-                    else None,
-                )
-                * 3
-                if base_st.players[0].reserved
-                else (),
-            ),
-        ),
-    )
-    # Actually need to construct 3 dummy reserved cards - simpler: just check that
-    # the logic enforces max 3. Let's manually create a state with 3 reserved.
     from splendor_duel_engine.engine.cards import load_cards
     from splendor_duel_engine.engine.state import ReservedCard
 
@@ -162,13 +195,20 @@ def test_reserved_cards_are_in_own_player_state_and_turn_passes():
     action = reserve_actions[0]
     st2 = apply(st, action)
 
+    # Should be in CHOOSE_GOLD phase
+    assert st2.phase is Phase.CHOOSE_GOLD
+    # Choose the gold
+    dp2 = decide(st2)
+    choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
+    st3 = apply(st2, choose_gold_actions[0])
+
     # Card should be in current player's reserved
-    assert len(st2.players[0].reserved) == 1
-    assert len(st2.players[1].reserved) == 0
+    assert len(st3.players[0].reserved) == 1
+    assert len(st3.players[1].reserved) == 0
     # Turn should pass to opponent
-    assert st2.current_player == 1
+    assert st3.current_player == 1
     # Phase should go to USE_PRIVILEGES for opponent
-    assert st2.phase is Phase.USE_PRIVILEGES
+    assert st3.phase is Phase.USE_PRIVILEGES
 
 
 def test_multicolor_may_be_reserved_without_owning_bonus():
@@ -195,11 +235,16 @@ def test_multicolor_may_be_reserved_without_owning_bonus():
     assert len(pyramid_actions) > 0
     # The action application should not fail due to multicolor restriction at reserve time
     st2 = apply(st, pyramid_actions[0])
-    assert len(st2.players[0].reserved) == 1
+    assert st2.phase is Phase.CHOOSE_GOLD
+    # Complete the reserve
+    dp2 = decide(st2)
+    choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
+    st3 = apply(st2, choose_gold_actions[0])
+    assert len(st3.players[0].reserved) == 1
     # Reserved card should be the multicolor one (or some card; the key is no error)
     assert (
-        st2.players[0].reserved[0].card.is_multicolor
-        or len(st2.players[0].reserved) == 1
+        st3.players[0].reserved[0].card.is_multicolor
+        or len(st3.players[0].reserved) == 1
     )
 
 

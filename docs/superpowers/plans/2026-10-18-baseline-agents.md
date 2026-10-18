@@ -10,6 +10,8 @@
 
 **Spec:** `docs/specs/splendor-duel-rules.md` (game rules); `docs/superpowers/plans/2026-10-17-python-engine.md` Task 9 (Observation API).
 
+**Dependency:** This plan requires the Observation API from the engine plan (Task 9: `src/splendor_duel_engine/engine/observation.py` with `observation(state, player) -> Observation`). Agents cannot be fully implemented until that exists. For now, agents can use a temporary `GameState` view or we implement a minimal observation shim.
+
 ## Global Constraints
 
 - Python 3.11+; **no new runtime dependencies** (engine has none; agents add none).
@@ -37,13 +39,14 @@
 - Test: `tests/agents/test_base.py`
 
 **Interfaces:**
-- Consumes: Engine `observation` (Task 9), `decide`, `apply`, `Action`, `Phase`, `Color`, `Tokens`.
+- Consumes: Engine `observation` (Task 9 — **must be implemented first**), `decide`, `apply`, `Action`, `Phase`, `Color`, `Tokens`.
 - Produces:
   - `base.py`:
     - `from typing import Protocol`
     - `class Agent(Protocol):`
       - `def choose_action(self, observation: Observation, legal_actions: tuple[Action, ...]) -> Action: ...`
     - `def play_game(agent0: Agent, agent1: Agent, seed: int) -> GameState` — helper that runs a full game between two agents using `new_game`, `decide`, `apply`, `observation`; returns final `GameState` with `winner` set.
+  - **Note:** Until `engine.observation` exists, agents will use a temporary `get_observation(state, player)` shim in `agents.base` that exposes the same interface using public `GameState` fields. This shim will be replaced by the real `engine.observation.observation` once Task 9 is done.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -238,14 +241,14 @@ git add -A && git commit -m "feat(agents): random agent with seeded RNG"
 
 | Phase | Heuristic |
 |-------|-----------|
-| `USE_PRIVILEGES` | If have privileges, use them to take the color most needed for the highest-value affordable card (considering bonuses). Priority: colors needed for cards with most points/crowns. If no clear need, take the most abundant non-gold color on board. Always `DoneWithPrivileges` when out of privileges or no useful color. |
-| `REPLENISH` | **Only replenish if forced** (i.e., `MANDATORY` would have zero legal actions and bag non-empty) OR if the board has < 3 non-gold tokens and bag has tokens (proactive but conservative). Otherwise `DoneWithReplenish`. |
-| `MANDATORY` | Priority order: (1) Buy the affordable card with highest `(points * 2 + crowns)` score. Affordable = can pay with current tokens + bonuses + gold, without exceeding 10 token hand limit after payment (spent tokens go to bag). (2) If gold on board and < 3 reserved cards: reserve the highest-value card that needs gold (from pyramid if it has a high-value card, else deck top with most remaining cards). (3) Take tokens: pick the legal line that maximizes `(tokens_taken.total() * 2 + color_value)` where `color_value` weights colors needed for affordable cards. Avoid penalty (3 same color or 2 pearls) unless the tokens enable an immediate high-value purchase. |
-| `CHOOSE_PAYMENT` | Among legal `PayTokens`, prefer payment that uses fewest gold, then fewest total tokens, then preserves most diverse hand. |
-| `MULTICOLOR_COLOR` | Choose the color where the agent has the most bonus tokens (maximizes future discounts and 10-point color win progress). Tie-break: color with highest point potential. |
-| `STEAL_TOKEN` | Steal the color the opponent has most of (non-gold), preferring colors the agent needs. |
-| `CHOOSE_ROYAL` | Priority: `EXTRA_TURN` > `PRIVILEGE` > `STEAL_TOKEN` > 3-point no-ability. |
-| `DISCARD` | Discard excess tokens (total - 10) preferring: gold last (valuable), pearls last (scarce), colors with most tokens in hand first, colors not needed for affordable cards. |
+| `USE_PRIVILEGES` | If have privileges, use them to take the color most needed for the highest-value affordable card. If no cards affordable, take the **least abundant non-gold color on board** (contested color). Always `DoneWithPrivileges` when out of privileges or no useful color. |
+| `REPLENISH` | **Only replenish if forced** (MANDATORY would have zero legal actions AND bag non-empty) **AND bag has >5 tokens**. Otherwise `DoneWithReplenish`. |
+| `MANDATORY` | Priority with one-step lookahead: (1) Buy best affordable card (points×2 + crowns). (2) **Take tokens if it enables a high-value buy next turn** (simulate: would the resulting hand make a >4pt card affordable?). (3) Reserve if gold on board, <3 reserved slots, for high-value card (>4pts or good ability). (4) Take tokens: score = tokens×2 + needed_bonus - penalty_cost (configurable weights). |
+| `CHOOSE_PAYMENT` | Among legal `PayTokens`, prefer fewest gold, then fewest total tokens. |
+| `MULTICOLOR_COLOR` | Choose color with most bonus tokens. Tie-break: highest point potential. |
+| `STEAL_TOKEN` | Steal opponent's most-held non-gold color, preferring colors we need. |
+| `CHOOSE_ROYAL` | Priority: `EXTRA_TURN` > `PRIVILEGE` > `STEAL_TOKEN` > 3pt none. |
+| `DISCARD` | Discard excess (total - 10) preferring: non-needed colors first, then high-count colors, preserve gold/pearls. Simple, no lookahead. |
 
 - [ ] **Step 1: Write failing tests**
 

@@ -10,6 +10,7 @@ class Phase(enum.Enum):
     REPLENISH = "replenish"
     MANDATORY = "mandatory"
     CHOOSE_PAYMENT = "choose_payment"
+    CHOOSE_GOLD = "choose_gold"
     MULTICOLOR_COLOR = "multicolor_color"
     STEAL_TOKEN = "steal_token"
     CHOOSE_ROYAL = "choose_royal"

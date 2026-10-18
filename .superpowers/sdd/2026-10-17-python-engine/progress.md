@@ -9,7 +9,7 @@ Branch: feat/python-engine (repo git-initialized this session; baseline commit 4
 - [x] Task 2: Board, state, deterministic setup
 - [x] Task 3: Step API and take-tokens action
 - [x] Task 4: Privileges, replenish, forced replenish
-- [ ] Task 5: Reserve and buy (with payment step)
+- [x] Task 5: Reserve and buy (with payment step)
 - [ ] Task 6: Card abilities and multicolor accounting
 - [ ] Task 7: Royal cards at 3rd and 6th crowns
 - [ ] Task 8: End-of-turn sequence and win conditions
@@ -79,3 +79,6 @@ Task 3: minor (deferred): none from review. Phase enum, step API, take-tokens li
 
 Task 4: complete (commits f9d4ff2..a627427, review clean)
 Task 4: minor (deferred): `.vscode/settings.json` was committed; removed from index and added to `.gitignore` in follow-up. `_grant_privilege` type hint tightened; bag draw order documented.
+
+Task 5: complete (commits 24e4df6..e0e8722, review clean after 1 fix round)
+Task 5: minor (deferred): Payment enumeration complexity noted; win condition per-color check iterates purchased cards each time (could cache). No functional issues.

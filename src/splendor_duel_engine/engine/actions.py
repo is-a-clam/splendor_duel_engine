@@ -31,7 +31,7 @@ _DIRECTIONS_8 = (
 
 @dataclass(frozen=True, slots=True)
 class UsePrivilege:
-    color: Color
+    index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +63,8 @@ class TakeTokens:
 
 @dataclass(frozen=True, slots=True)
 class BuyCard:
-    card_id: str
+    card: Card
+    source: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,11 @@ class PayTokens:
 @dataclass(frozen=True, slots=True)
 class ReserveCard:
     source: str
+    index: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChooseGold:
     index: int
 
 
@@ -106,6 +112,7 @@ Action = (
     | BuyCard
     | PayTokens
     | ReserveCard
+    | ChooseGold
     | ChooseMulticolor
     | ChooseStealToken
     | ChooseRoyal
@@ -319,10 +326,10 @@ def _get_reserve_actions(state: GameState) -> list[ReserveCard]:
     return actions
 
 
-def _get_buyable_cards(state: GameState) -> list[tuple[str, Card, str]]:
-    """Return list of (card_id, card, source) for cards the active player can buy.
+def _get_buyable_cards(state: GameState) -> list[BuyCard]:
+    """Return list of BuyCard actions for cards the active player can buy.
 
-    Source is "reserved" or "pyramid" with row/col encoded.
+    Source is "reserved" or "pyramid_r_c" (e.g., "pyramid_0_2").
     Deduplicates by card_id, preferring reserved source (since a card cannot
     be in both places simultaneously in a valid state, but we guard anyway).
     """
@@ -356,7 +363,7 @@ def _get_buyable_cards(state: GameState) -> list[tuple[str, Card, str]]:
                     source = f"pyramid_{row_idx}_{col_idx}"
                     buyable[card.id] = (card, source)
 
-    return [(cid, card, source) for cid, (card, source) in buyable.items()]
+    return [BuyCard(card=card, source=source) for card, source in buyable.values()]
 
 
 def _grant_privilege(
@@ -364,7 +371,7 @@ def _grant_privilege(
 ) -> tuple[tuple[PlayerState, PlayerState], int]:
     """Grant 1 privilege to recipient from supply, or steal from other player."""
     other = 1 - recipient
-    new_players = list(players)
+    new_players = [players[0], players[1]]
     new_supply = supply
     if new_supply > 0:
         new_supply = supply - 1
@@ -380,22 +387,22 @@ def _grant_privilege(
             new_players[recipient] = dataclasses.replace(
                 players[recipient], privileges=players[recipient].privileges + 1
             )
-    return tuple(new_players), new_supply
+    return (new_players[0], new_players[1]), new_supply
 
 
-def _apply_use_privilege(state: GameState, color: Color) -> GameState:
+def _apply_use_privilege(state: GameState, index: int) -> GameState:
     active = state.current_player
     ap = state.players[active]
 
-    # Find a token of the chosen color on the board (non-gold guaranteed by decide)
-    board = list(state.board)
-    try:
-        idx = next(i for i, c in enumerate(board) if c == color)
-    except StopIteration:
-        raise ValueError(f"no token of color {color} on board")
+    # Validate the index
+    if index < 0 or index >= _BOARD_SIZE:
+        raise ValueError(f"invalid board index {index}")
+    color = state.board[index]
+    if color is None or color == Color.GOLD:
+        raise ValueError(f"no non-gold token at index {index}")
 
-    new_board_list = list(board)
-    new_board_list[idx] = None
+    new_board_list = list(state.board)
+    new_board_list[index] = None
     new_board = tuple(new_board_list)
 
     # Add token to player's hand
@@ -423,41 +430,27 @@ def _apply_replenish(state: GameState) -> GameState:
     active = state.current_player
     opp = 1 - active
 
-    # Draw from bag onto empty spaces in SPIRAL order
-    board = list(state.board)
-    bag = state.bag
-
-    # Collect available tokens from bag in a deterministic order.
-    # This fixed order (WHITE, BLUE, GREEN, RED, BLACK, PEARL, GOLD) is arbitrary but
-    # ensures reproducibility; the spec does not prescribe a bag-draw order.
+    # Collect all tokens from bag into a list
     token_colors: list[Color] = []
-    for color in (
-        Color.WHITE,
-        Color.BLUE,
-        Color.GREEN,
-        Color.RED,
-        Color.BLACK,
-        Color.PEARL,
-        Color.GOLD,
-    ):
-        count = bag.count(color)
+    for color in Color:
+        count = state.bag.count(color)
         token_colors.extend([color] * count)
 
-    # Fill empty slots along SPIRAL
-    filled_count = 0
-    for spiral_idx in SPIRAL:
-        if filled_count >= len(token_colors):
-            break
-        if board[spiral_idx] is None:
-            board[spiral_idx] = token_colors[filled_count]
-            filled_count += 1
+    # Shuffle the tokens using state.rng
+    state.rng.shuffle(token_colors)
 
-    # Update bag: remove the tokens that were placed
-    new_bag_dict = {color.value: bag.count(color) for color in Color}
-    for i in range(filled_count):
-        color = token_colors[i]
-        new_bag_dict[color.value] -= 1
-    new_bag = Tokens(**new_bag_dict)
+    # Collect all empty board indices in SPIRAL order
+    empty_indices = [idx for idx in SPIRAL if state.board[idx] is None]
+
+    # Place tokens from shuffled list onto empty slots in SPIRAL order
+    # (up to min(len(tokens), len(empty_slots)))
+    board = list(state.board)
+    placed_count = min(len(token_colors), len(empty_indices))
+    for i in range(placed_count):
+        board[empty_indices[i]] = token_colors[i]
+
+    # New bag is empty (all tokens placed since total = 25)
+    new_bag = Tokens()
 
     # Grant opponent 1 privilege
     new_players, new_priv_supply = _grant_privilege(
@@ -519,23 +512,9 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
     new_priv_supply = state.privileges_supply
     if penalty:
         opp = 1 - active
-        opp_state = state.players[opp]
-        if state.privileges_supply > 0:
-            new_priv_supply = state.privileges_supply - 1
-            new_opp = dataclasses.replace(
-                opp_state, privileges=opp_state.privileges + 1
-            )
-            new_players_list[opp] = new_opp
-        else:
-            if new_ap.privileges > 0:
-                new_ap_pen = dataclasses.replace(
-                    new_ap, privileges=new_ap.privileges - 1
-                )
-                new_opp = dataclasses.replace(
-                    opp_state, privileges=opp_state.privileges + 1
-                )
-                new_players_list[active] = new_ap_pen
-                new_players_list[opp] = new_opp
+        new_players_list, new_priv_supply = _grant_privilege(
+            tuple(new_players_list), opp, state.privileges_supply
+        )
 
     return dataclasses.replace(
         state,
@@ -548,55 +527,103 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
 
 
 def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
+    """Set pending_reserve and enter CHOOSE_GOLD phase."""
+    # Validate gold is available on board
+    gold_indices = [i for i, c in enumerate(state.board) if c == Color.GOLD]
+    if not gold_indices:
+        raise ValueError("no gold on board to reserve")
+
+    # Validate source and card exist
+    card: Card | None = None
+
+    if action.source == "pyramid":
+        row_idx = action.index // 10
+        col_idx = action.index % 10
+        if row_idx >= len(state.pyramid) or col_idx >= len(state.pyramid[row_idx]):
+            raise ValueError("invalid pyramid index")
+        card = state.pyramid[row_idx][col_idx]
+        if card is None:
+            raise ValueError("empty pyramid slot")
+    elif action.source.startswith("deck_"):
+        level = int(action.source.split("_")[1])
+        deck_idx = 3 - level  # level 3->0, 2->1, 1->2
+        if deck_idx < 0 or deck_idx >= len(state.decks):
+            raise ValueError(f"invalid deck index {deck_idx}")
+        deck = state.decks[deck_idx]
+        if not deck:
+            raise ValueError(f"deck level {level} empty")
+        card = deck[-1]  # top card
+    else:
+        raise ValueError(f"unknown reserve source: {action.source}")
+
+    # Check player has fewer than 3 reserved cards
+    active = state.current_player
+    ap = state.players[active]
+    if len(ap.reserved) >= 3:
+        raise ValueError("player already has 3 reserved cards")
+
+    return dataclasses.replace(
+        state,
+        pending_reserve=action,
+        phase=Phase.CHOOSE_GOLD,
+    )
+
+
+def _apply_choose_gold(state: GameState, index: int) -> GameState:
+    """Take the chosen gold token and complete the reserve."""
     active = state.current_player
     ap = state.players[active]
     opp = 1 - active
 
-    # Take gold from board (first gold found)
+    pending_action = state.pending_reserve
+    if pending_action is None:
+        raise ValueError("no pending reserve action")
+
+    # Validate the index has a gold token
+    if index < 0 or index >= _BOARD_SIZE:
+        raise ValueError(f"invalid board index {index}")
+    if state.board[index] != Color.GOLD:
+        raise ValueError(f"no gold token at index {index}")
+
+    # Take gold from board
     board = list(state.board)
-    gold_idx = _find_gold_on_board(state.board)
-    if gold_idx is None:
-        raise ValueError("no gold on board to reserve")
-    board[gold_idx] = None
+    board[index] = None
     new_board = tuple(board)
 
     # Add gold to player's hand
     gold_tokens = Tokens(gold=1)
     new_ap = dataclasses.replace(ap, tokens=ap.tokens + gold_tokens)
 
-    # Take the card from source
-    card: Card
-    from_deck: bool
+    # Take the card from source (same logic as before, but card is known to exist)
     new_pyramid = [list(row) for row in state.pyramid]
     new_decks = [list(d) for d in state.decks]
 
-    if action.source == "pyramid":
-        row_idx = action.index // 10
-        col_idx = action.index % 10
+    card: Card | None = None
+    from_deck: bool = False
+
+    if pending_action.source == "pyramid":
+        row_idx = pending_action.index // 10
+        col_idx = pending_action.index % 10
         card = state.pyramid[row_idx][col_idx]
-        if card is None:
-            raise ValueError("empty pyramid slot")
         from_deck = False
         # Remove from pyramid
         new_pyramid[row_idx][col_idx] = None
-        # Refill from corresponding deck (same row index)
+        # Refill from corresponding deck
         deck = new_decks[row_idx]
         if deck:
             new_pyramid[row_idx][col_idx] = deck.pop()
-    elif action.source.startswith("deck_"):
-        level = int(action.source.split("_")[1])
-        deck_idx = 3 - level  # level 3->0, 2->1, 1->2
+    elif pending_action.source.startswith("deck_"):
+        level = int(pending_action.source.split("_")[1])
+        deck_idx = 3 - level
         deck = new_decks[deck_idx]
-        if not deck:
-            raise ValueError(f"deck level {level} empty")
         card = deck.pop()
         from_deck = True
     else:
-        raise ValueError(f"unknown reserve source: {action.source}")
+        raise ValueError(f"unknown reserve source: {pending_action.source}")
 
     # Add card to player's reserved
     reserved_card = ReservedCard(card=card, from_deck=from_deck)
-    new_reserved = ap.reserved + (reserved_card,)
+    new_reserved = new_ap.reserved + (reserved_card,)
     new_ap = dataclasses.replace(new_ap, reserved=new_reserved)
 
     new_players_list = list(state.players)
@@ -608,44 +635,61 @@ def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
         board=new_board,
         pyramid=tuple(tuple(row) for row in new_pyramid),
         decks=tuple(tuple(d) for d in new_decks),
+        pending_reserve=None,
         current_player=opp,
         phase=Phase.USE_PRIVILEGES,
     )
 
 
 def _apply_buy_card(state: GameState, action: BuyCard) -> GameState:
-    """Set pending card and enter CHOOSE_PAYMENT phase."""
+    """Set pending_buy and enter CHOOSE_PAYMENT phase."""
+    # The action already contains the card and source, just validate it's buyable
     active = state.current_player
     ap = state.players[active]
+    bonus = ap.bonus
 
-    # Find the card being bought
-    card: Card | None = None
-    source_type: str | None = None
+    # Verify the card is buyable (affordable and in the right place)
+    card = action.card
+    source = action.source
 
-    # Check reserved cards
-    for reserved in ap.reserved:
-        if reserved.card.id == action.card_id:
-            card = reserved.card
-            source_type = "reserved"
-            break
-
-    # Check pyramid
-    if card is None:
-        for r_idx, row in enumerate(state.pyramid):
-            for c_idx, pyr_card in enumerate(row):
-                if pyr_card is not None and pyr_card.id == action.card_id:
-                    card = pyr_card
-                    source_type = "pyramid"
-                    break
-            if card is not None:
+    if source == "reserved":
+        # Check the card is in player's reserved
+        found = False
+        for reserved in ap.reserved:
+            if reserved.card.id == card.id:
+                found = True
                 break
+        if not found:
+            raise ValueError(f"card {card.id} not in reserved")
+    elif source.startswith("pyramid_"):
+        # Parse pyramid coordinates
+        parts = source.split("_")
+        if len(parts) != 3:
+            raise ValueError(f"invalid pyramid source: {source}")
+        row_idx = int(parts[1])
+        col_idx = int(parts[2])
+        if row_idx >= len(state.pyramid) or col_idx >= len(state.pyramid[row_idx]):
+            raise ValueError("invalid pyramid index")
+        pyr_card = state.pyramid[row_idx][col_idx]
+        if pyr_card is None or pyr_card.id != card.id:
+            raise ValueError(f"card {card.id} not at pyramid source")
+    else:
+        raise ValueError(f"unknown buy source: {source}")
 
-    if card is None or source_type is None:
-        raise ValueError(f"card {action.card_id} not found in buyable cards")
+    # Verify affordability
+    remaining = _remaining_cost_after_bonuses(card.cost, bonus)
+    if not _can_afford(remaining, ap.tokens):
+        raise ValueError("cannot afford card")
+
+    # Multicolor restriction
+    if card.is_multicolor:
+        has_colored_bonus = any(bonus.count(c) > 0 for c in GEM_COLORS)
+        if not has_colored_bonus:
+            raise ValueError("cannot buy multicolor card without colored bonus")
 
     return dataclasses.replace(
         state,
-        pending=card,
+        pending_buy=action,
         phase=Phase.CHOOSE_PAYMENT,
     )
 
@@ -654,48 +698,41 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     active = state.current_player
     ap = state.players[active]
 
-    pending_card = state.pending
-    if pending_card is None:
+    pending_action = state.pending_buy
+    if pending_action is None:
         raise ValueError("no pending card to pay for")
+
+    card = pending_action.card
+    source = pending_action.source
 
     # Determine source and remove card from there
     new_players_list = list(state.players)
     new_pyramid = [list(row) for row in state.pyramid]
     new_decks = [list(d) for d in state.decks]
 
-    source_type: str | None = None
-
-    # Check reserved
-    for i, reserved in enumerate(ap.reserved):
-        if reserved.card.id == pending_card.id:
-            source_type = "reserved"
-            # Remove from reserved
-            new_reserved = ap.reserved[:i] + ap.reserved[i + 1 :]
-            new_ap = dataclasses.replace(ap, reserved=new_reserved)
-            new_players_list[active] = new_ap
-            break
-
-    # Check pyramid
-    if source_type is None:
-        for r_idx, row in enumerate(state.pyramid):
-            for c_idx, pyr_card in enumerate(row):
-                if pyr_card is not None and pyr_card.id == pending_card.id:
-                    source_type = "pyramid"
-                    new_pyramid[r_idx][c_idx] = None
-                    # Refill from corresponding deck
-                    deck = new_decks[r_idx]
-                    if deck:
-                        new_pyramid[r_idx][c_idx] = deck.pop()
-                    break
-            if source_type is not None:
+    if source == "reserved":
+        # Remove from reserved
+        for i, reserved in enumerate(ap.reserved):
+            if reserved.card.id == card.id:
+                new_reserved = ap.reserved[:i] + ap.reserved[i + 1 :]
+                new_ap = dataclasses.replace(ap, reserved=new_reserved)
+                new_players_list[active] = new_ap
                 break
-
-    if source_type is None:
-        raise ValueError("pending card not found in reserved or pyramid")
+    elif source.startswith("pyramid_"):
+        parts = source.split("_")
+        row_idx = int(parts[1])
+        col_idx = int(parts[2])
+        new_pyramid[row_idx][col_idx] = None
+        # Refill from corresponding deck
+        deck = new_decks[row_idx]
+        if deck:
+            new_pyramid[row_idx][col_idx] = deck.pop()
+    else:
+        raise ValueError(f"unknown buy source: {source}")
 
     # Validate payment
     bonus = ap.bonus
-    remaining = _remaining_cost_after_bonuses(pending_card.cost, bonus)
+    remaining = _remaining_cost_after_bonuses(card.cost, bonus)
     if not _can_afford(remaining, action.payment):
         raise ValueError("insufficient payment")
     # Also verify payment doesn't exceed player's tokens
@@ -716,27 +753,27 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     new_players_list[active] = new_ap
 
     # Add card to purchased
-    purchased_card = PurchasedCard(card=pending_card, chosen_color=None)
+    purchased_card = PurchasedCard(card=card, chosen_color=None)
     new_purchased = new_ap.purchased + (purchased_card,)
     new_ap = dataclasses.replace(new_ap, purchased=new_purchased)
 
     # Grant bonus, prestige, crowns
     new_bonus = Tokens(
-        white=bonus.white + (1 if pending_card.bonus == Color.WHITE else 0),
-        blue=bonus.blue + (1 if pending_card.bonus == Color.BLUE else 0),
-        green=bonus.green + (1 if pending_card.bonus == Color.GREEN else 0),
-        red=bonus.red + (1 if pending_card.bonus == Color.RED else 0),
-        black=bonus.black + (1 if pending_card.bonus == Color.BLACK else 0),
+        white=bonus.white + (1 if card.bonus == Color.WHITE else 0),
+        blue=bonus.blue + (1 if card.bonus == Color.BLUE else 0),
+        green=bonus.green + (1 if card.bonus == Color.GREEN else 0),
+        red=bonus.red + (1 if card.bonus == Color.RED else 0),
+        black=bonus.black + (1 if card.bonus == Color.BLACK else 0),
         pearl=0,
         gold=0,
     )
     # Multicolor cards have bonus=None, so no bonus granted
-    if pending_card.bonus is not None:
+    if card.bonus is not None:
         new_ap = dataclasses.replace(new_ap, bonus=new_bonus)
     new_ap = dataclasses.replace(
         new_ap,
-        prestige=new_ap.prestige + pending_card.points,
-        crowns=new_ap.crowns + pending_card.crowns,
+        prestige=new_ap.prestige + card.points,
+        crowns=new_ap.crowns + card.crowns,
     )
     new_players_list[active] = new_ap
 
@@ -764,7 +801,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         bag=new_bag,
         pyramid=tuple(tuple(row) for row in new_pyramid),
         decks=tuple(tuple(d) for d in new_decks),
-        pending=None,
+        pending_buy=None,
         winner=winner,
         current_player=active,  # Same player continues (Task 6: ability resolution here)
         phase=Phase.USE_PRIVILEGES,
@@ -780,15 +817,9 @@ def decide(state: GameState) -> DecisionPoint:
         actions: list[Action] = []
         if ap.privileges > 0:
             # Can use privilege to take any non-gold, non-empty token from board
-            seen_colors: set[Color] = set()
             for idx, color in enumerate(state.board):
-                if (
-                    color is not None
-                    and color != Color.GOLD
-                    and color not in seen_colors
-                ):
-                    actions.append(UsePrivilege(color))
-                    seen_colors.add(color)
+                if color is not None and color != Color.GOLD:
+                    actions.append(UsePrivilege(index=idx))
         actions.append(DoneWithPrivileges())
         return DecisionPoint(phase=Phase.USE_PRIVILEGES, legal_actions=tuple(actions))
 
@@ -799,6 +830,13 @@ def decide(state: GameState) -> DecisionPoint:
         actions.append(DoneWithReplenish())
         return DecisionPoint(phase=Phase.REPLENISH, legal_actions=tuple(actions))
 
+    if state.phase == Phase.CHOOSE_GOLD:
+        actions: list[Action] = []
+        for idx, color in enumerate(state.board):
+            if color == Color.GOLD:
+                actions.append(ChooseGold(index=idx))
+        return DecisionPoint(phase=Phase.CHOOSE_GOLD, legal_actions=tuple(actions))
+
     if state.phase == Phase.MANDATORY:
         actions: list[Action] = []
         for line in _legal_take_token_lines(state.board):
@@ -808,8 +846,8 @@ def decide(state: GameState) -> DecisionPoint:
         actions.extend(_get_reserve_actions(state))
 
         # Buy actions (own reserved + pyramid)
-        for card_id, card, source in _get_buyable_cards(state):
-            actions.append(BuyCard(card_id=card_id))
+        for buy_action in _get_buyable_cards(state):
+            actions.append(buy_action)
 
         # Forced replenish: if no legal take actions and bag non-empty, go to REPLENISH
         # But only if no reserve/buy actions either
@@ -824,12 +862,12 @@ def decide(state: GameState) -> DecisionPoint:
         return DecisionPoint(phase=Phase.MANDATORY, legal_actions=tuple(actions))
 
     if state.phase == Phase.CHOOSE_PAYMENT:
-        pending_card = state.pending
-        if pending_card is None:
+        pending_action = state.pending_buy
+        if pending_action is None:
             return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=())
         ap = state.players[state.current_player]
         bonus = ap.bonus
-        remaining = _remaining_cost_after_bonuses(pending_card.cost, bonus)
+        remaining = _remaining_cost_after_bonuses(pending_action.card.cost, bonus)
         legal_payments = _enumerate_legal_payments(remaining, ap.tokens)
         actions: list[Action] = [PayTokens(payment=p) for p in legal_payments]
         return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=tuple(actions))
@@ -843,7 +881,7 @@ def apply(state: GameState, action: Action) -> GameState:
         raise ValueError("illegal action")
 
     if isinstance(action, UsePrivilege):
-        return _apply_use_privilege(state, action.color)
+        return _apply_use_privilege(state, action.index)
     if isinstance(action, DoneWithPrivileges):
         # Advance to REPLENISH
         return dataclasses.replace(state, phase=Phase.REPLENISH)
@@ -855,6 +893,8 @@ def apply(state: GameState, action: Action) -> GameState:
         return _apply_take_tokens(state, action.line)
     if isinstance(action, ReserveCard):
         return _apply_reserve_card(state, action)
+    if isinstance(action, ChooseGold):
+        return _apply_choose_gold(state, action.index)
     if isinstance(action, BuyCard):
         return _apply_buy_card(state, action)
     if isinstance(action, PayTokens):

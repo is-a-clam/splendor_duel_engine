@@ -274,7 +274,7 @@ git add -A && git commit -m "feat: step API and take-tokens action with penalty 
 ### Task 4: Privileges, replenish, and forced replenish
 
 **Files:**
-- Modify: `src/splendor_duel_engine/engine/actions.py`
+- Modify: `src/splendor_duel_engine/engine/actions.py`, `src/splendor_duel_engine/engine/phase.py`
 - Test: `tests/test_privileges_replenish.py`
 
 **Interfaces:**
@@ -286,13 +286,15 @@ git add -A && git commit -m "feat: step API and take-tokens action with penalty 
 `tests/test_privileges_replenish.py`:
 
 ```python
-def test_use_privilege_takes_one_chosen_non_gold_board_token():
-    st = ...  # player holds 1 privilege
+def test_use_privilege_takes_chosen_non_gold_board_token_by_index():
+    st = ...  # player holds 1 privilege, board has non-gold tokens
     dp = decide(st)
     assert dp.phase is Phase.USE_PRIVILEGES
-    take = next(a for a in dp.legal_actions if isinstance(a, UsePrivilege))
-    assert Color.GOLD not in {a.color for a in dp.legal_actions if isinstance(a, UsePrivilege)}
-    st2 = apply(st, take)
+    # Legal actions are UsePrivilege(index) for each non-gold, non-empty board index
+    take_actions = [a for a in dp.legal_actions if isinstance(a, UsePrivilege)]
+    assert len(take_actions) > 0
+    assert all(st.board[a.index] is not None and st.board[a.index] != Color.GOLD for a in take_actions)
+    st2 = apply(st, take_actions[0])
     assert st2.players[st.current_player].privileges == 0
     # chosen token moved board -> hand
 
@@ -302,13 +304,13 @@ def test_multiple_privileges_used_one_at_a_time():
 def test_done_with_privileges_advances_to_replenish():
     # bag non-empty -> REPLENISH phase with Replenish and DoneWithReplenish both legal
 
-def test_replenish_fills_from_bag_along_spiral_and_grants_opponent_privilege():
-    # board with 3 empty slots, bag with 3 tokens
+def test_replenish_fills_randomly_from_bag_using_rng_and_grants_opponent_privilege():
+    # board with empty slots, bag with tokens
+    # Replenish draws tokens from bag randomly (using state.rng), places them along SPIRAL order
+    # Bag should be empty after (all 25 tokens on board)
     st2 = apply(st, Replenish())
-    filled = [i for i in SPIRAL if st.board[i] is None][:3]   # first empties along spiral (center-out)
-    assert all(st2.board[i] is not None for i in filled)
     assert st2.bag.total() == 0
-    assert st2.players[1 - st.current_player].privileges == old + 1  # spec: opponent takes 1
+    assert st2.players[1 - st.current_player].privileges == old + 1
 
 def test_replenish_illegal_when_bag_empty():
     dp = decide(state_with_empty_bag)
@@ -319,6 +321,35 @@ def test_forced_replenish_when_no_mandatory_action():
     st2 = decide(st)
     assert st2.phase is Phase.REPLENISH
     assert [type(a) for a in st2.legal_actions] == [Replenish]
+
+def test_take_tokens_penalty_uses_grant_privilege():
+    # 3 same-color or 2 pearls -> opponent gains privilege via _grant_privilege
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `uv run pytest tests/test_privileges_replenish.py -v` — expected: FAIL (no such phases/transitions).
+
+- [ ] **Step 3: Implement privilege and replenish transitions**
+
+Wire the `USE_PRIVILEGES` and `REPLENISH` phases into `decide`/`apply`.
+
+**USE_PRIVILEGES**: `decide` enumerates `UsePrivilege(index)` for every board index with a non-gold, non-empty token. `apply(UsePrivilege(index))` validates the index, moves that specific token to player's hand, decrements privilege. Stays in `USE_PRIVILEGES` if more privileges remain, else advances to `REPLENISH`.
+
+**REPLENISH**: `apply(Replenish())` collects all tokens from bag into a list, shuffles that list with `state.rng`, collects all empty board indices in SPIRAL order (not shuffled), places tokens from shuffled list onto empty slots in SPIRAL order (bag becomes empty since total tokens = 25 = board size). Then grants opponent 1 privilege via `_grant_privilege`. Advances to `MANDATORY`.
+
+**Forced replenish**: In `MANDATORY`, if no legal take/reserve/buy actions and `bag.total() > 0`, return `REPLENISH` with only `Replenish` legal.
+
+**Penalty refactor**: `_apply_take_tokens` must call `_grant_privilege` instead of duplicating logic.
+
+- [ ] **Step 4: Run tests, lint**
+
+Run: `uv run pytest tests/test_privileges_replenish.py tests/test_take_tokens.py -v && uv run ruff check .` — expected: PASS (no regressions).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A && git commit -m "feat: privilege usage, replenish, forced replenish (spec: turn structure)"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -344,15 +375,24 @@ git add -A && git commit -m "feat: privilege usage, replenish, forced replenish 
 ### Task 5: Reserve and buy (with payment step)
 
 **Files:**
-- Modify: `src/splendor_duel_engine/engine/actions.py`
-- Test: `tests/test_reserve.py`, `tests/test_buy.py`
+- Modify: `src/splendor_duel_engine/engine/actions.py`, `src/splendor_duel_engine/engine/state.py`, `src/splendor_duel_engine/engine/phase.py`
+- Test: `tests/test_reserve.py`, `tests/test_buy.py`, `tests/test_choose_gold.py` (new)
 
 **Interfaces:**
 - Consumes: Tasks 3–4.
 - Produces:
-  - `MANDATORY` now also enumerates `BuyCard(card_id)` (affordable cards from own reserved + pyramid) and `ReserveCard(source, index)`.
-  - New phase `CHOOSE_PAYMENT`: `BuyCard` sets `pending` to the chosen card; `decide` then enumerates `PayTokens(payment)` for every legal payment. A payment is legal iff, after subtracting per-gem bonuses (`min 0` per color, pearls never reduced), the remaining cost is covered by the payment's gold count. Gold is wild: `PayTokens` is validated against all possible gold assignments.
+  - `MANDATORY` now also enumerates `BuyCard(card, source)` (affordable cards from own reserved + pyramid) and `ReserveCard(source, index)`.
+  - New phase `CHOOSE_GOLD`: after `ReserveCard`, player chooses which gold token to take from board via `ChooseGold(index)`.
+  - New phase `CHOOSE_PAYMENT`: `BuyCard` sets `pending_buy` to the chosen `BuyCard` action; `decide` then enumerates `PayTokens(payment)` for every legal payment. A payment is legal iff, after subtracting per-gem bonuses (`min 0` per color, pearls never reduced), the remaining cost is covered by the payment's gold count. Gold is wild: `PayTokens` is validated against all possible gold assignments.
   - Pyramid purchase refills the slot from that deck (if any); reserve takes gold from the board *first* (only gold source), then a pyramid card (slot refills) or a deck top card (no refill). Multicolor purchase *restriction* is enforced here (cannot buy without an owned colored bonus); the chosen-color decision arrives in Task 6.
+
+**Action changes:**
+- `UsePrivilege(index: int)` — player chooses exact board index (Task 4)
+- `BuyCard(card: Card, source: str)` — includes full Card and source ("reserved" or "pyramid_r_c")
+- `ReserveCard(source: str, index: int)` — unchanged
+- `ChooseGold(index: int)` — NEW, for selecting which gold token during reserve
+- `GameState.pending_buy: BuyCard | None` — REPLACES `pending: Card | None`
+- `GameState.pending_reserve: ReserveCard | None` — NEW for CHOOSE_GOLD
 
 - [ ] **Step 1: Write failing tests**
 
@@ -360,11 +400,20 @@ git add -A && git commit -m "feat: privilege usage, replenish, forced replenish 
 
 ```python
 def test_reserve_requires_gold_on_board(): ...        # no gold -> ReserveCard not in legal actions
-def test_reserve_takes_gold_then_pyramid_card_and_refills(): ...
+def test_reserve_enters_choose_gold_phase(): ...      # ReserveCard -> CHOOSE_GOLD phase
+def test_reserve_from_pyramid_refills_slot(): ...     # after ChooseGold, pyramid refills
 def test_reserve_from_deck_top_does_not_refill(): ...
 def test_reserve_illegal_at_three_reserved(): ...
 def test_reserved_cards_are_in_own_player_state_and_turn_passes(): ...
 def test_multicolor_may_be_reserved_without_owning_bonus(): ...  # spec: restriction applies at purchase only
+```
+
+`tests/test_choose_gold.py` (NEW):
+
+```python
+def test_choose_gold_enumerates_all_gold_indices(): ...
+def test_choose_gold_takes_specific_gold_token(): ...
+def test_choose_gold_completes_reserve_and_passes_turn(): ...
 ```
 
 `tests/test_buy.py`:
@@ -386,11 +435,21 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `uv run pytest tests/test_reserve.py tests/test_buy.py -v` — expected: FAIL.
+Run: `uv run pytest tests/test_reserve.py tests/test_buy.py tests/test_choose_gold.py -v` — expected: FAIL.
 
 - [ ] **Step 3: Implement reserve, buy, and the payment decision point**
 
-Add buyable-card enumeration (own reserved + pyramid; affordability = `cost - bonus` per gem color covered by hand incl. wild gold; multicolor requires an owned colored bonus). `ReserveCard`: validate gold-on-board and `< 3` reserved, take gold from board, take the card, wrap it in `ReservedCard(card, from_deck=<source is a deck top>)`, refill the pyramid slot if source was the pyramid. `PayTokens`: validate as described, move spent tokens to the bag, hand the card to `purchased` (`PurchasedCard(card, chosen_color=None)`), add bonus/prestige/crowns, refill pyramid slot on pyramid buys, then return to `USE_PRIVILEGES` with the player unchanged (Task 6 inserts ability resolution here).
+**Reserve flow:**
+1. `MANDATORY` enumerates `ReserveCard(source, index)` for legal reserves (gold on board, <3 reserved)
+2. `apply(ReserveCard)` sets `pending_reserve = action`, enters `CHOOSE_GOLD` phase
+3. `CHOOSE_GOLD` enumerates `ChooseGold(index)` for each gold token on board
+4. `apply(ChooseGold(index))` takes that gold, completes the reserve (adds card to reserved with `from_deck`, refills pyramid if source was pyramid), clears `pending_reserve`, advances to opponent's `USE_PRIVILEGES`
+
+**Buy flow:**
+1. `MANDATORY` enumerates `BuyCard(card, source)` for affordable cards (own reserved + pyramid)
+2. `apply(BuyCard)` sets `pending_buy = action`, enters `CHOOSE_PAYMENT`
+3. `CHOOSE_PAYMENT` enumerates `PayTokens(payment)` for all legal payments
+4. `apply(PayTokens)` validates payment, moves tokens to bag, removes card from source, refills pyramid if needed, creates `PurchasedCard(card, chosen_color=None)`, grants bonus/prestige/crowns (multicolor bonus deferred to Task 6), checks win conditions, returns to `USE_PRIVILEGES` (Task 6 inserts ability resolution here)
 
 - [ ] **Step 4: Run tests, lint**
 

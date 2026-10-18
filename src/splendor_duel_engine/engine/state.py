@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.cards import Card, RoyalCard, load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
+
+if TYPE_CHECKING:
+    from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
 
 #: ``(row_length, deck_index)`` for the ``pyramid`` rows in order (level 3,
 #: level 2, level 1). ``decks`` is stored in the same order — index 0/1/2 is
@@ -96,7 +100,8 @@ class GameState:
     current_player: int
     winner: int | None
     phase: Phase
-    pending: Card | None
+    pending_buy: BuyCard | None
+    pending_reserve: ReserveCard | None
     #: Excluded from equality/repr: two games from the same seed compare equal
     #: even though their RNG streams are separate objects.
     rng: random.Random = field(compare=False, repr=False)
@@ -154,7 +159,8 @@ def new_game(seed: int) -> GameState:
         current_player=current_player,
         winner=None,
         phase=Phase.MANDATORY,
-        pending=None,
+        pending_buy=None,
+        pending_reserve=None,
         rng=rng,
     )
 

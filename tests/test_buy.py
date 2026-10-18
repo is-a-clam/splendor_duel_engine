@@ -6,6 +6,7 @@ import pytest
 
 from splendor_duel_engine.engine.actions import (
     BuyCard,
+    ChooseGold,
     DoneWithPrivileges,
     DoneWithReplenish,
     PayTokens,
@@ -58,7 +59,7 @@ def test_payment_respects_bonuses_and_never_goes_below_zero():
     # Buy the card
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -111,7 +112,7 @@ def test_pearl_cost_never_reduced():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -155,7 +156,7 @@ def test_gold_pays_as_any_color_or_pearl():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -193,7 +194,7 @@ def test_pyramid_purchase_refills_from_deck_or_stays_empty_when_deck_empty():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -240,7 +241,7 @@ def test_reserved_purchase_does_not_refill():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -279,7 +280,7 @@ def test_spent_tokens_go_to_bag():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -326,7 +327,7 @@ def test_buy_grants_bonus_prestige_crowns():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -371,7 +372,7 @@ def test_multicolor_cannot_be_bought_without_colored_bonus():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 0  # Not buyable without colored bonus
 
@@ -385,7 +386,7 @@ def test_multicolor_cannot_be_bought_without_colored_bonus():
     )
     dp2 = decide(st2)
     buy_actions2 = [
-        a for a in dp2.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp2.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions2) == 1  # Now buyable
 
@@ -420,7 +421,7 @@ def test_choose_payment_phase_offers_only_legal_payments():
 
     dp = decide(st)
     buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card_id == card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
     ]
     assert len(buy_actions) == 1
     st2 = apply(st, buy_actions[0])
@@ -446,77 +447,84 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
     # Start with a known state
     st = new_game(42)
 
-    # Ensure gold on board for reserve
-    board = list(st.board)
+    # Ensure exactly one gold on board for reserve
+    board = [None] * 25
     board[0] = Color.GOLD
     st = replace(st, board=tuple(board), current_player=0, phase=Phase.MANDATORY)
 
-    # Reserve a card (takes gold from board)
+    # Reserve a card (takes gold from board via CHOOSE_GOLD)
     dp = decide(st)
     reserve_actions = [a for a in dp.legal_actions if isinstance(a, ReserveCard)]
     assert len(reserve_actions) > 0
     st2 = apply(st, reserve_actions[0])
 
+    # Should be in CHOOSE_GOLD phase
+    assert st2.phase is Phase.CHOOSE_GOLD
+    dp2 = decide(st2)
+    choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
+    assert len(choose_gold_actions) == 1
+    st3 = apply(st2, choose_gold_actions[0])
+
     # Player 0 should now have gold in hand
-    assert st2.players[0].tokens.gold == 1
-    assert len(st2.players[0].reserved) == 1
-    reserved_card = st2.players[0].reserved[0]
+    assert st3.players[0].tokens.gold == 1
+    assert len(st3.players[0].reserved) == 1
+    reserved_card = st3.players[0].reserved[0]
 
     # Give player 0 enough gold to buy the reserved card (cost varies, give plenty)
-    st2 = replace(
-        st2,
+    st3 = replace(
+        st3,
         players=(
-            replace(st2.players[0], tokens=Tokens(gold=15)),
-            st2.players[1],
+            replace(st3.players[0], tokens=Tokens(gold=15)),
+            st3.players[1],
         ),
     )
 
     # Turn passed to player 1 (opponent)
-    assert st2.current_player == 1
-    assert st2.phase == Phase.USE_PRIVILEGES
+    assert st3.current_player == 1
+    assert st3.phase == Phase.USE_PRIVILEGES
 
     # Opponent does a simple take tokens action to pass turn back
     # Opponent is in USE_PRIVILEGES phase, must go through to MANDATORY
     # Give opponent a valid line of tokens (indices 1, 2, 3 in a row)
-    board_p1 = list(st2.board)
+    board_p1 = list(st3.board)
     board_p1[1] = Color.RED
     board_p1[2] = Color.RED
     board_p1[3] = Color.RED
-    st2 = replace(st2, board=tuple(board_p1))
+    st3 = replace(st3, board=tuple(board_p1))
 
     # Opponent: DoneWithPrivileges -> REPLENISH phase
-    st2 = apply(st2, DoneWithPrivileges())
+    st3 = apply(st3, DoneWithPrivileges())
     # Opponent: DoneWithReplenish -> MANDATORY phase (bag is empty in this test setup)
-    st2 = apply(st2, DoneWithReplenish())
+    st3 = apply(st3, DoneWithReplenish())
 
-    dp_p1 = decide(st2)
+    dp_p1 = decide(st3)
     take_actions = [a for a in dp_p1.legal_actions if hasattr(a, "line")]
     assert len(take_actions) > 0
-    st3 = apply(st2, take_actions[0])
+    st4 = apply(st3, take_actions[0])
 
     # Turn should be back to player 0
-    assert st3.current_player == 0
-    assert st3.phase == Phase.USE_PRIVILEGES
+    assert st4.current_player == 0
+    assert st4.phase == Phase.USE_PRIVILEGES
 
     # Player 0 can now buy the reserved card using the gold
     # Need to advance past USE_PRIVILEGES and REPLENISH to MANDATORY
-    st4 = apply(st3, DoneWithPrivileges())
-    st4 = apply(st4, DoneWithReplenish())
+    st5 = apply(st4, DoneWithPrivileges())
+    st5 = apply(st5, DoneWithReplenish())
 
     # Now in MANDATORY, buy the reserved card
-    dp4 = decide(st4)
+    dp5 = decide(st5)
     buy_actions = [
         a
-        for a in dp4.legal_actions
-        if isinstance(a, BuyCard) and a.card_id == reserved_card.card.id
+        for a in dp5.legal_actions
+        if isinstance(a, BuyCard) and a.card.id == reserved_card.card.id
     ]
     assert len(buy_actions) == 1
-    st5 = apply(st4, buy_actions[0])
-    assert st5.phase == Phase.CHOOSE_PAYMENT
+    st6 = apply(st5, buy_actions[0])
+    assert st6.phase == Phase.CHOOSE_PAYMENT
 
     # Pay with the gold token
-    dp5 = decide(st5)
-    pay_actions = [a for a in dp5.legal_actions if isinstance(a, PayTokens)]
+    dp6 = decide(st6)
+    pay_actions = [a for a in dp6.legal_actions if isinstance(a, PayTokens)]
     # Find a payment that uses gold
     gold_pay = None
     for pay in pay_actions:
@@ -524,23 +532,23 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
             gold_pay = pay
             break
     assert gold_pay is not None, "Should have a payment using gold"
-    st6 = apply(st5, gold_pay)
+    st7 = apply(st6, gold_pay)
 
     # Gold should have moved from hand to bag (player spent some gold)
-    assert st6.players[0].tokens.gold < 15  # Started with 15, spent some
-    assert st6.bag.gold >= 1  # At least 1 gold went to bag
+    assert st7.players[0].tokens.gold < 15  # Started with 15, spent some
+    assert st7.bag.gold >= 1  # At least 1 gold went to bag
 
     # Now simulate a replenish to put gold back on board
     # Empty some board spaces
     board_empty = [None] * 25
-    st6 = replace(
-        st6, board=tuple(board_empty), current_player=0, phase=Phase.USE_PRIVILEGES
+    st7 = replace(
+        st7, board=tuple(board_empty), current_player=0, phase=Phase.USE_PRIVILEGES
     )
-    st7 = apply(st6, DoneWithPrivileges())
-    st8 = apply(st7, Replenish())  # Replenish from bag (which has gold)
+    st8 = apply(st7, DoneWithPrivileges())
+    st9 = apply(st8, Replenish())  # Replenish from bag (which has gold)
 
     # Gold should be on the board now (since bag had gold and board was empty)
-    gold_on_board = sum(1 for c in st8.board if c == Color.GOLD)
+    gold_on_board = sum(1 for c in st9.board if c == Color.GOLD)
     assert gold_on_board >= 1, (
         "Gold from bag should be placed on board during replenish"
     )

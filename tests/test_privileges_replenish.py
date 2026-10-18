@@ -38,10 +38,14 @@ def test_use_privilege_takes_one_chosen_non_gold_board_token():
     assert dp.phase is Phase.USE_PRIVILEGES
     take_actions = [a for a in dp.legal_actions if isinstance(a, UsePrivilege)]
     assert len(take_actions) > 0
-    assert Color.GOLD not in {a.color for a in take_actions}
+    # All actions should be for non-gold tokens
+    assert all(
+        st.board[a.index] is not None and st.board[a.index] != Color.GOLD
+        for a in take_actions
+    )
 
     # Take the token
-    chosen_action = next(a for a in take_actions if a.color == token_color)
+    chosen_action = next(a for a in take_actions if a.index == non_gold_idx)
     st2 = apply(st, chosen_action)
     assert st2.players[0].privileges == 0
     assert st2.players[0].tokens.count(token_color) == 1
@@ -72,7 +76,7 @@ def test_multiple_privileges_used_one_at_a_time():
     take1 = next(
         a
         for a in dp1.legal_actions
-        if isinstance(a, UsePrivilege) and a.color == st.board[non_gold_indices[0]]
+        if isinstance(a, UsePrivilege) and a.index == non_gold_indices[0]
     )
     st2 = apply(st, take1)
     assert st2.players[0].privileges == 1
@@ -83,7 +87,7 @@ def test_multiple_privileges_used_one_at_a_time():
     take2 = next(
         a
         for a in dp2.legal_actions
-        if isinstance(a, UsePrivilege) and a.color == st2.board[non_gold_indices[1]]
+        if isinstance(a, UsePrivilege) and a.index == non_gold_indices[1]
     )
     st3 = apply(st2, take2)
     assert st3.players[0].privileges == 0
