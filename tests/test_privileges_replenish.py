@@ -28,7 +28,9 @@ def test_use_privilege_takes_one_chosen_non_gold_board_token():
     # Player holds 1 privilege
     st = board_state(current_player=0, phase=Phase.USE_PRIVILEGES)
     # Find a non-gold token on board
-    non_gold_idx = next(i for i, c in enumerate(st.board) if c is not None and c != Color.GOLD)
+    non_gold_idx = next(
+        i for i, c in enumerate(st.board) if c is not None and c != Color.GOLD
+    )
     token_color = st.board[non_gold_idx]
     assert token_color is not None
 
@@ -60,19 +62,29 @@ def test_multiple_privileges_used_one_at_a_time():
         ),
     )
     # Find two non-gold tokens
-    non_gold_indices = [i for i, c in enumerate(st.board) if c is not None and c != Color.GOLD]
+    non_gold_indices = [
+        i for i, c in enumerate(st.board) if c is not None and c != Color.GOLD
+    ]
     assert len(non_gold_indices) >= 2
 
     # First privilege use
     dp1 = decide(st)
-    take1 = next(a for a in dp1.legal_actions if isinstance(a, UsePrivilege) and a.color == st.board[non_gold_indices[0]])
+    take1 = next(
+        a
+        for a in dp1.legal_actions
+        if isinstance(a, UsePrivilege) and a.color == st.board[non_gold_indices[0]]
+    )
     st2 = apply(st, take1)
     assert st2.players[0].privileges == 1
     assert st2.phase is Phase.USE_PRIVILEGES  # Still in USE_PRIVILEGES
 
     # Second privilege use
     dp2 = decide(st2)
-    take2 = next(a for a in dp2.legal_actions if isinstance(a, UsePrivilege) and a.color == st2.board[non_gold_indices[1]])
+    take2 = next(
+        a
+        for a in dp2.legal_actions
+        if isinstance(a, UsePrivilege) and a.color == st2.board[non_gold_indices[1]]
+    )
     st3 = apply(st2, take2)
     assert st3.players[0].privileges == 0
     assert st3.phase is Phase.REPLENISH
@@ -133,15 +145,19 @@ def test_replenish_illegal_when_bag_empty():
 
 
 def test_forced_replenish_when_no_mandatory_action():
-    # Construct: nothing affordable, no gold on board, bag non-empty, board almost empty
-    # We need a state in MANDATORY phase with no legal take actions (gold blocks or empty)
-    # and bag non-empty -> should be forced to REPLENISH
-    board = [None] * 25
-    board[0] = Color.GOLD  # Gold blocks
-    board[1] = Color.GOLD
+    # Construct: nothing affordable, no gold on board, bag non-empty, board empty
+    # We need a state in MANDATORY phase with no legal take actions (board empty),
+    # no reserve actions (no gold), no buy actions (no tokens), and bag non-empty
+    # -> should be forced to REPLENISH
+    board = [None] * 25  # Empty board: no take actions, no gold for reserve
     bag = Tokens(white=1)
-    base_st = board_state(current_player=0, phase=Phase.MANDATORY, board=tuple(board), bag=bag)
-    st = replace(base_st, players=(replace(base_st.players[0], tokens=Tokens()), base_st.players[1]))
+    base_st = board_state(
+        current_player=0, phase=Phase.MANDATORY, board=tuple(board), bag=bag
+    )
+    st = replace(
+        base_st,
+        players=(replace(base_st.players[0], tokens=Tokens()), base_st.players[1]),
+    )
     dp = decide(st)
     assert dp.phase is Phase.REPLENISH
     assert [type(a) for a in dp.legal_actions] == [Replenish]
