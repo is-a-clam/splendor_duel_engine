@@ -94,6 +94,11 @@ class ChooseStealToken:
 
 
 @dataclass(frozen=True, slots=True)
+class ChooseMatchingToken:
+    index: int
+
+
+@dataclass(frozen=True, slots=True)
 class ChooseRoyal:
     royal_id: str
 
@@ -115,6 +120,7 @@ Action = (
     | ChooseGold
     | ChooseMulticolor
     | ChooseStealToken
+    | ChooseMatchingToken
     | ChooseRoyal
     | DiscardTokens
 )
@@ -208,6 +214,22 @@ def decide(state: GameState) -> DecisionPoint:
         actions: list[Action] = [ChooseStealToken(color=c) for c in stealable_colors]
         return DecisionPoint(phase=Phase.STEAL_TOKEN, legal_actions=tuple(actions))
 
+    if state.phase == Phase.TAKE_MATCHING_TOKEN:
+        if state.pending_ability != Ability.TAKE_MATCHING_TOKEN:
+            return DecisionPoint(phase=Phase.TAKE_MATCHING_TOKEN, legal_actions=())
+        # Find all board indices with the matching color
+        # The card is stored in pending_buy from the ability resolution
+        pending_action = state.pending_buy
+        if pending_action is None:
+            return DecisionPoint(phase=Phase.TAKE_MATCHING_TOKEN, legal_actions=())
+        card = pending_action.card
+        if card.bonus is None:
+            return DecisionPoint(phase=Phase.TAKE_MATCHING_TOKEN, legal_actions=())
+        bonus_color = card.bonus
+        matching_indices = [idx for idx, color in enumerate(state.board) if color == bonus_color]
+        actions: list[Action] = [ChooseMatchingToken(index=idx) for idx in matching_indices]
+        return DecisionPoint(phase=Phase.TAKE_MATCHING_TOKEN, legal_actions=tuple(actions))
+
     return DecisionPoint(phase=state.phase, legal_actions=())
 
 
@@ -242,6 +264,8 @@ def apply(state: GameState, action: Action) -> GameState:
         return _apply_choose_multicolor(state, action.color)
     if isinstance(action, ChooseStealToken):
         return _apply_choose_steal_token(state, action.color)
+    if isinstance(action, ChooseMatchingToken):
+        return _apply_choose_matching_token(state, action.index)
     return state
 
 
@@ -943,7 +967,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             bag=new_bag,
             pyramid=tuple(tuple(row) for row in new_pyramid),
             decks=tuple(tuple(d) for d in new_decks),
-            pending_buy=None,
+            pending_buy=pending_action,
             winner=None,
             current_player=active,
             phase=Phase.USE_PRIVILEGES,
@@ -957,9 +981,6 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
 
 def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
     """Resolve the card's single ability (if any). Returns final state."""
-    # Clear pending_buy - purchase fully complete
-    state = dataclasses.replace(state, pending_buy=None)
-    
     match card.ability:
         case Ability.STEAL_TOKEN:
             opp = 1 - active
@@ -975,37 +996,39 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
             return _normal_turn_end(state, active)
 
         case Ability.TAKE_MATCHING_TOKEN:
+            # Keep pending_buy for the decision phase to access card's bonus color
             return _run_take_matching_token(state, card, active)
 
         case Ability.PRIVILEGE:
-            return _run_privilege(state, card, active)
+            # Clear pending_buy as this ability completes immediately
+            return _run_privilege(
+                dataclasses.replace(state, pending_buy=None), card, active
+            )
 
         case Ability.EXTRA_TURN:
-            return _run_extra_turn(state, card, active)
+            # Clear pending_buy as this ability completes immediately
+            return _run_extra_turn(
+                dataclasses.replace(state, pending_buy=None), card, active
+            )
 
         case None:
-            return _normal_turn_end(state, active)
+            # Clear pending_buy as no ability
+            return _normal_turn_end(
+                dataclasses.replace(state, pending_buy=None), active
+            )
 
 
 def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameState:
     if card.bonus is not None:
         bonus_color = card.bonus
-        board = list(state.board)
-        for idx, color in enumerate(board):
-            if color == bonus_color:
-                board[idx] = None
-                new_board = tuple(board)
-                taken = Tokens(**{bonus_color.value: 1})
-                new_players = list(state.players)
-                new_players[active] = dataclasses.replace(
-                    state.players[active], tokens=state.players[active].tokens + taken
-                )
-                state = dataclasses.replace(
-                    state,
-                    players=tuple(new_players),
-                    board=new_board,
-                )
-                break
+        matching_indices = [idx for idx, color in enumerate(state.board) if color == bonus_color]
+        if matching_indices:
+            # Keep pending_buy for the decision phase
+            return dataclasses.replace(
+                state,
+                phase=Phase.TAKE_MATCHING_TOKEN,
+                pending_ability=Ability.TAKE_MATCHING_TOKEN,
+            )
     return _normal_turn_end(state, active)
 
 
@@ -1113,6 +1136,51 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
             state,
             players=tuple(new_players),
             pending_ability=None,
+        ),
+        active,
+    )
+
+
+def _apply_choose_matching_token(state: GameState, index: int) -> GameState:
+    """Resolve taking a matching token from the board."""
+    if state.pending_ability != Ability.TAKE_MATCHING_TOKEN:
+        raise ValueError("not in take matching token phase")
+
+    active = state.current_player
+    pending_action = state.pending_buy
+    if pending_action is None:
+        raise ValueError("no pending card for take matching token")
+
+    card = pending_action.card
+    if card.bonus is None:
+        raise ValueError("card has no bonus color")
+
+    bonus_color = card.bonus
+    if index < 0 or index >= _BOARD_SIZE:
+        raise ValueError(f"invalid board index {index}")
+    if state.board[index] != bonus_color:
+        raise ValueError(f"no {bonus_color} token at index {index}")
+
+    # Take the token from board
+    board = list(state.board)
+    board[index] = None
+    new_board = tuple(board)
+
+    # Add token to player's hand
+    taken = Tokens(**{bonus_color.value: 1})
+    new_players = list(state.players)
+    new_players[active] = dataclasses.replace(
+        state.players[active], tokens=state.players[active].tokens + taken
+    )
+
+    # Normal turn end
+    return _normal_turn_end(
+        dataclasses.replace(
+            state,
+            players=tuple(new_players),
+            board=new_board,
+            pending_ability=None,
+            pending_buy=None,
         ),
         active,
     )

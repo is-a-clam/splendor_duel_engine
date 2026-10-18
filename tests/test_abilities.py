@@ -6,6 +6,7 @@ import pytest
 
 from splendor_duel_engine.engine.actions import (
     BuyCard,
+    ChooseMatchingToken,
     ChooseMulticolor,
     ChooseStealToken,
     DoneWithPrivileges,
@@ -147,8 +148,8 @@ class TestExtraTurn:
 
 
 class TestTakeMatchingToken:
-    def test_take_matching_token_auto_taken_when_present(self):
-        """TAKE_MATCHING_TOKEN: auto-takes 1 board token of card's bonus color if present."""
+    def test_take_matching_token_chooses_from_board(self):
+        """TAKE_MATCHING_TOKEN: enters TAKE_MATCHING_TOKEN phase, player chooses which token to take."""
         base_st = new_game(0)
         jewels, _ = load_cards()
         # Find a card with take_matching_token ability - L1-02 (bonus=black)
@@ -173,17 +174,37 @@ class TestTakeMatchingToken:
                 base_st.players[1],
             ),
         )
-        # Place a black token on board at index 0
+        # Place black tokens on board at indices 0 and 5
         board = list(st.board)
         board[0] = Color.BLACK
+        board[5] = Color.BLACK
         st = replace(st, board=tuple(board))
 
         st = _complete_buy(st, take_match_card)
 
-        # After purchase, should have taken the black token from board
+        # Should enter TAKE_MATCHING_TOKEN phase
+        assert st.phase is Phase.TAKE_MATCHING_TOKEN
+        assert st.pending_ability == Ability.TAKE_MATCHING_TOKEN
+
+        # Legal actions should be ChooseMatchingToken for each black token
+        dp = decide(st)
+        choose_actions = [a for a in dp.legal_actions if isinstance(a, ChooseMatchingToken)]
+        assert len(choose_actions) == 2
+        choose_indices = {a.index for a in choose_actions}
+        assert choose_indices == {0, 5}
+
+        # Choose index 0
+        choose_action = next(a for a in choose_actions if a.index == 0)
+        st = apply(st, choose_action)
+
+        # Token at index 0 should be taken
         assert st.board[0] is None
+        # Token at index 5 should remain
+        assert st.board[5] == Color.BLACK
         # Player should have gained 1 black token
         assert st.players[0].tokens.black == 1
+        # Should return to USE_PRIVILEGES for same player
+        assert st.phase is Phase.USE_PRIVILEGES
 
     def test_take_matching_token_ignored_when_absent(self):
         """TAKE_MATCHING_TOKEN: ignored (no error) if no token of that color on board."""
