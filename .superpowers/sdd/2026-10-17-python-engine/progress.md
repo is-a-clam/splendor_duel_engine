@@ -12,7 +12,7 @@ Task 2: complete (commits b930b9f..b776ebc, review clean)
 Task 2: minor (deferred): none from review; indexing convention (`decks[0]=level3`, `decks[1]=level2`, `decks[2]=level1`, pyramid rows level 3,2,1) is documented and enforced by tests.
 Task 2: note: review findings match both reviews (approve). No critical/important findings.
 
-- [ ] Task 3: Step API and take-tokens action
+- [x] Task 3: Step API and take-tokens action
 - [ ] Task 4: Privileges, replenish, forced replenish
 - [ ] Task 5: Reserve and buy (with payment step)
 - [ ] Task 6: Card abilities and multicolor accounting
@@ -78,3 +78,6 @@ Task 1: minor (deferred): unrequested but justified `[tool.ruff] extend-exclude 
 Task 1: minor (deferred): the royal `(points, ability)` sort is data-fragile — safe only because exactly one royal has 3 points, so `Ability` never gets compared against `None`.
 Task 1: ⚠️ from review, resolved by controller: `ruff check .` and `ruff format --check .` re-run on the final tree after `extend-exclude` landed → clean.
 
+
+Task 3: complete (commits 21cec25..19e64b9, review clean)
+Task 3: minor (deferred): none from review. Phase enum, step API, take-tokens line enumeration/penalty all correct and tested.
