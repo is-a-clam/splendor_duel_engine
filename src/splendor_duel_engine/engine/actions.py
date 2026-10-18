@@ -10,7 +10,7 @@ from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 
 if TYPE_CHECKING:
-    from splendor_duel_engine.engine.state import GameState
+    from splendor_duel_engine.engine.state import GameState, PlayerState
 
 
 _BOARD_SIZE = 25
@@ -171,7 +171,7 @@ def _count_color_in_tokens(tokens_taken: list[Color]) -> dict[Color, int]:
     return counts
 
 
-def _grant_privilege(players: tuple, recipient: int, supply: int) -> tuple[tuple, int]:
+def _grant_privilege(players: tuple[PlayerState, PlayerState], recipient: int, supply: int) -> tuple[tuple[PlayerState, PlayerState], int]:
     """Grant 1 privilege to recipient from supply, or steal from other player."""
     other = 1 - recipient
     new_players = list(players)
@@ -235,7 +235,9 @@ def _apply_replenish(state: GameState) -> GameState:
     board = list(state.board)
     bag = state.bag
 
-    # Collect available tokens from bag in a deterministic order
+    # Collect available tokens from bag in a deterministic order.
+    # This fixed order (WHITE, BLUE, GREEN, RED, BLACK, PEARL, GOLD) is arbitrary but
+    # ensures reproducibility; the spec does not prescribe a bag-draw order.
     token_colors: list[Color] = []
     for color in (
         Color.WHITE,

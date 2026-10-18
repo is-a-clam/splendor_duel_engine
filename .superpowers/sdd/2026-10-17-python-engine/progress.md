@@ -7,13 +7,8 @@ Branch: feat/python-engine (repo git-initialized this session; baseline commit 4
 
 - [x] Task 1: Scaffolding, card data schema, card loader
 - [x] Task 2: Board, state, deterministic setup
-
-Task 2: complete (commits b930b9f..b776ebc, review clean)
-Task 2: minor (deferred): none from review; indexing convention (`decks[0]=level3`, `decks[1]=level2`, `decks[2]=level1`, pyramid rows level 3,2,1) is documented and enforced by tests.
-Task 2: note: review findings match both reviews (approve). No critical/important findings.
-
 - [x] Task 3: Step API and take-tokens action
-- [ ] Task 4: Privileges, replenish, forced replenish
+- [x] Task 4: Privileges, replenish, forced replenish
 - [ ] Task 5: Reserve and buy (with payment step)
 - [ ] Task 6: Card abilities and multicolor accounting
 - [ ] Task 7: Royal cards at 3rd and 6th crowns
@@ -81,3 +76,6 @@ Task 1: ⚠️ from review, resolved by controller: `ruff check .` and `ruff for
 
 Task 3: complete (commits 21cec25..19e64b9, review clean)
 Task 3: minor (deferred): none from review. Phase enum, step API, take-tokens line enumeration/penalty all correct and tested.
+
+Task 4: complete (commits f9d4ff2..a627427, review clean)
+Task 4: minor (deferred): `.vscode/settings.json` was committed; removed from index and added to `.gitignore` in follow-up. `_grant_privilege` type hint tightened; bag draw order documented.
