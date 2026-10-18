@@ -792,18 +792,14 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
         raise ValueError(f"no gold token at index {index}")
 
     # Take gold from board
-    board = list(state.board)
-    board[index] = None
-    new_board = tuple(board)
+    state = _remove_from_board(state, index)
 
     # Add gold to player's hand
     gold_tokens = Tokens(gold=1)
     new_ap = dataclasses.replace(ap, tokens=ap.tokens + gold_tokens)
+    state = _replace_player(state, active, new_ap)
 
     # Extract card from source and update pyramid/decks in one unified logic
-    new_pyramid = [list(row) for row in state.pyramid]
-    new_decks = [list(d) for d in state.decks]
-
     card: Card
     from_deck: bool = False
 
@@ -812,35 +808,23 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
         col_idx = pending_action.index % 10
         card = state.pyramid[row_idx][col_idx]
         from_deck = False
-        # Remove from pyramid
-        new_pyramid[row_idx][col_idx] = None
-        # Refill from corresponding deck
-        deck = new_decks[row_idx]
-        if deck:
-            new_pyramid[row_idx][col_idx] = deck.pop()
+        # Remove from pyramid and refill from deck
+        state = _refill_pyramid_from_deck(state, row_idx, col_idx)
     elif pending_action.source.startswith("deck_"):
         level = int(pending_action.source.split("_")[1])
         deck_idx = 3 - level
-        deck = new_decks[deck_idx]
-        card = deck.pop()
+        card, state = _pop_deck(state, deck_idx)
         from_deck = True
     else:
         raise ValueError(f"unknown reserve source: {pending_action.source}")
 
     # Add card to player's reserved
     reserved_card = ReservedCard(card=card, from_deck=from_deck)
-    new_reserved = new_ap.reserved + (reserved_card,)
-    new_ap = dataclasses.replace(new_ap, reserved=new_reserved)
-
-    new_players_list = list(state.players)
-    new_players_list[active] = new_ap
+    new_ap = dataclasses.replace(new_ap, reserved=new_ap.reserved + (reserved_card,))
+    state = _replace_player(state, active, new_ap)
 
     return dataclasses.replace(
         state,
-        players=tuple(new_players_list),
-        board=new_board,
-        pyramid=tuple(tuple(row) for row in new_pyramid),
-        decks=tuple(tuple(d) for d in new_decks),
         pending_reserve=None,
         current_player=opp,
         phase=Phase.USE_PRIVILEGES,
