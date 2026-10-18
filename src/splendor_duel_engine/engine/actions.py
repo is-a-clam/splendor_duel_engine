@@ -58,28 +58,6 @@ def _add_to_bag(state: GameState, tokens: Tokens) -> GameState:
     return dataclasses.replace(state, bag=Tokens(**new_bag_dict))
 
 
-def _remove_from_bag(state: GameState, tokens: Tokens) -> GameState:
-    """Remove tokens from bag."""
-    new_bag_dict = {c.value: state.bag.count(c) - tokens.count(c) for c in Color}
-    return dataclasses.replace(state, bag=Tokens(**new_bag_dict))
-
-
-def _update_pyramid_decks(state: GameState, pyramid: list[list[Card | None]], decks: list[list[Card]]) -> GameState:
-    """Update pyramid and decks together."""
-    return dataclasses.replace(
-        state,
-        pyramid=tuple(tuple(r) for r in pyramid),
-        decks=tuple(tuple(d) for d in decks),
-    )
-
-
-def _set_pyramid_slot(state: GameState, row_idx: int, col_idx: int, card: Card | None) -> GameState:
-    """Set a pyramid slot and return new state."""
-    new_pyramid = [list(r) for r in state.pyramid]
-    new_pyramid[row_idx][col_idx] = card
-    return dataclasses.replace(state, pyramid=tuple(tuple(r) for r in new_pyramid))
-
-
 def _pop_deck(state: GameState, deck_idx: int) -> tuple[Card, GameState]:
     """Pop top card from deck and return (card, new_state)."""
     new_decks = [list(d) for d in state.decks]
@@ -88,27 +66,28 @@ def _pop_deck(state: GameState, deck_idx: int) -> tuple[Card, GameState]:
     return card, new_state
 
 
-def _pop_pyramid(state: GameState, row_idx: int, col_idx: int) -> tuple[Card | None, GameState]:
-    """Take card from pyramid slot and return (card, new_state)."""
-    new_pyramid = [list(r) for r in state.pyramid]
-    card = new_pyramid[row_idx][col_idx]
-    new_pyramid[row_idx][col_idx] = None
-    new_state = dataclasses.replace(state, pyramid=tuple(tuple(r) for r in new_pyramid))
-    return card, new_state
-
-
-def _refill_pyramid_from_deck(state: GameState, row_idx: int, col_idx: int) -> GameState:
-    """Refill pyramid slot from corresponding deck."""
+def _take_pyramid_card(state: GameState, row_idx: int, col_idx: int) -> tuple[Card | None, GameState]:
+    """Take card from pyramid slot and refill from corresponding deck in one atomic operation.
+    
+    Returns (card, new_state). If the corresponding deck is empty, the slot stays empty.
+    """
     new_pyramid = [list(r) for r in state.pyramid]
     new_decks = [list(d) for d in state.decks]
+    
+    card = new_pyramid[row_idx][col_idx]
+    new_pyramid[row_idx][col_idx] = None
+    
+    # Refill from corresponding deck
     deck = new_decks[row_idx]
     if deck:
         new_pyramid[row_idx][col_idx] = deck.pop()
-    return dataclasses.replace(
+    
+    new_state = dataclasses.replace(
         state,
         pyramid=tuple(tuple(r) for r in new_pyramid),
         decks=tuple(tuple(d) for d in new_decks),
     )
+    return card, new_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -615,9 +594,6 @@ def _grant_privilege(
     return (new_players[0], new_players[1]), new_supply
 
 
-# ===== Ability resolution chain =====
-
-
 def _apply_use_privilege(state: GameState, index: int) -> GameState:
     active = state.current_player
     ap = state.players[active]
@@ -750,6 +726,7 @@ def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
         raise ValueError("no gold on board to reserve")
     if len(ap.reserved) >= 3:
         raise ValueError("player already has 3 reserved cards")
+    
     # Validate source exists and has a card (but don't extract yet)
     if action.source == "pyramid":
         row_idx = action.index // 10
@@ -806,10 +783,9 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
     if pending_action.source == "pyramid":
         row_idx = pending_action.index // 10
         col_idx = pending_action.index % 10
-        card = state.pyramid[row_idx][col_idx]
+        # Take card and refill from deck in one atomic operation
+        card, state = _take_pyramid_card(state, row_idx, col_idx)
         from_deck = False
-        # Remove from pyramid and refill from deck
-        state = _refill_pyramid_from_deck(state, row_idx, col_idx)
     elif pending_action.source.startswith("deck_"):
         level = int(pending_action.source.split("_")[1])
         deck_idx = 3 - level
@@ -923,12 +899,10 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         parts = source.split("_")
         row_idx = int(parts[1])
         col_idx = int(parts[2])
-        # Use helper to pop pyramid and refill from deck
-        card_from_pyramid, state = _pop_pyramid(state, row_idx, col_idx)
+        # Use helper to take pyramid card and refill from deck in one atomic operation
+        card_from_pyramid, state = _take_pyramid_card(state, row_idx, col_idx)
         if card_from_pyramid.id != card.id:
             raise ValueError(f"card {card.id} not at pyramid source")
-        # Refill from corresponding deck
-        state = _refill_pyramid_from_deck(state, row_idx, col_idx)
     else:
         raise ValueError(f"unknown buy source: {source}")
 
