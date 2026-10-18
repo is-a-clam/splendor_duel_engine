@@ -5,6 +5,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 
@@ -170,6 +171,114 @@ def _count_color_in_tokens(tokens_taken: list[Color]) -> dict[Color, int]:
     return counts
 
 
+def _grant_privilege(players: tuple, recipient: int, supply: int) -> tuple[tuple, int]:
+    """Grant 1 privilege to recipient from supply, or steal from other player."""
+    other = 1 - recipient
+    new_players = list(players)
+    new_supply = supply
+    if new_supply > 0:
+        new_supply = supply - 1
+        new_players[recipient] = dataclasses.replace(
+            players[recipient], privileges=players[recipient].privileges + 1
+        )
+    else:
+        # Steal from other player
+        if players[other].privileges > 0:
+            new_players[other] = dataclasses.replace(
+                players[other], privileges=players[other].privileges - 1
+            )
+            new_players[recipient] = dataclasses.replace(
+                players[recipient], privileges=players[recipient].privileges + 1
+            )
+    return tuple(new_players), new_supply
+
+
+def _apply_use_privilege(state: GameState, color: Color) -> GameState:
+    active = state.current_player
+    ap = state.players[active]
+
+    # Find a token of the chosen color on the board (non-gold guaranteed by decide)
+    board = list(state.board)
+    try:
+        idx = next(i for i, c in enumerate(board) if c == color)
+    except StopIteration:
+        raise ValueError(f"no token of color {color} on board")
+
+    new_board_list = list(board)
+    new_board_list[idx] = None
+    new_board = tuple(new_board_list)
+
+    # Add token to player's hand
+    taken_tokens = Tokens(**{color.value: 1})
+    new_ap = dataclasses.replace(ap, tokens=ap.tokens + taken_tokens, privileges=ap.privileges - 1)
+
+    new_players_list = list(state.players)
+    new_players_list[active] = new_ap
+
+    # Determine next phase: stay in USE_PRIVILEGES if more privileges, else REPLENISH
+    next_phase = Phase.USE_PRIVILEGES if new_ap.privileges > 0 else Phase.REPLENISH
+
+    return dataclasses.replace(
+        state,
+        players=tuple(new_players_list),
+        board=new_board,
+        current_player=active,  # same player continues
+        phase=next_phase,
+    )
+
+
+def _apply_replenish(state: GameState) -> GameState:
+    active = state.current_player
+    opp = 1 - active
+
+    # Draw from bag onto empty spaces in SPIRAL order
+    board = list(state.board)
+    bag = state.bag
+
+    # Collect available tokens from bag in a deterministic order
+    token_colors: list[Color] = []
+    for color in (
+        Color.WHITE,
+        Color.BLUE,
+        Color.GREEN,
+        Color.RED,
+        Color.BLACK,
+        Color.PEARL,
+        Color.GOLD,
+    ):
+        count = bag.count(color)
+        token_colors.extend([color] * count)
+
+    # Fill empty slots along SPIRAL
+    filled_count = 0
+    for spiral_idx in SPIRAL:
+        if filled_count >= len(token_colors):
+            break
+        if board[spiral_idx] is None:
+            board[spiral_idx] = token_colors[filled_count]
+            filled_count += 1
+
+    # Update bag: remove the tokens that were placed
+    new_bag_dict = {color.value: bag.count(color) for color in Color}
+    for i in range(filled_count):
+        color = token_colors[i]
+        new_bag_dict[color.value] -= 1
+    new_bag = Tokens(**new_bag_dict)
+
+    # Grant opponent 1 privilege
+    new_players, new_priv_supply = _grant_privilege(state.players, opp, state.privileges_supply)
+
+    return dataclasses.replace(
+        state,
+        players=new_players,
+        board=tuple(board),
+        bag=new_bag,
+        privileges_supply=new_priv_supply,
+        current_player=active,  # same player continues to MANDATORY
+        phase=Phase.MANDATORY,
+    )
+
+
 def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
     if not _is_straight_line(line) or len(line) < 1 or len(line) > 3:
         raise ValueError("line must be contiguous straight of length 1-3")
@@ -239,12 +348,39 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
 def decide(state: GameState) -> DecisionPoint:
     if state.winner is not None:
         raise ValueError("game is over")
+
+    if state.phase == Phase.USE_PRIVILEGES:
+        ap = state.players[state.current_player]
+        actions: list[Action] = []
+        if ap.privileges > 0:
+            # Can use privilege to take any non-gold, non-empty token from board
+            seen_colors: set[Color] = set()
+            for idx, color in enumerate(state.board):
+                if color is not None and color != Color.GOLD and color not in seen_colors:
+                    actions.append(UsePrivilege(color))
+                    seen_colors.add(color)
+        actions.append(DoneWithPrivileges())
+        return DecisionPoint(phase=Phase.USE_PRIVILEGES, legal_actions=tuple(actions))
+
+    if state.phase == Phase.REPLENISH:
+        actions: list[Action] = []
+        if state.bag.total() > 0:
+            actions.append(Replenish())
+        actions.append(DoneWithReplenish())
+        return DecisionPoint(phase=Phase.REPLENISH, legal_actions=tuple(actions))
+
     if state.phase == Phase.MANDATORY:
         actions: list[Action] = []
         for line in _legal_take_token_lines(state.board):
             actions.append(TakeTokens(line))
+
+        # Forced replenish: if no legal take actions and bag non-empty, go to REPLENISH
+        if not actions and state.bag.total() > 0:
+            return DecisionPoint(phase=Phase.REPLENISH, legal_actions=(Replenish(),))
+
         actions.sort(key=lambda a: (len(a.line), a.line) if isinstance(a, TakeTokens) else (0, ()))
-        return DecisionPoint(phase=state.phase, legal_actions=tuple(actions))
+        return DecisionPoint(phase=Phase.MANDATORY, legal_actions=tuple(actions))
+
     return DecisionPoint(phase=state.phase, legal_actions=())
 
 
@@ -252,6 +388,16 @@ def apply(state: GameState, action: Action) -> GameState:
     dp = decide(state)
     if action not in dp.legal_actions:
         raise ValueError("illegal action")
+
+    if isinstance(action, UsePrivilege):
+        return _apply_use_privilege(state, action.color)
+    if isinstance(action, DoneWithPrivileges):
+        # Advance to REPLENISH
+        return dataclasses.replace(state, phase=Phase.REPLENISH)
+    if isinstance(action, Replenish):
+        return _apply_replenish(state)
+    if isinstance(action, DoneWithReplenish):
+        return dataclasses.replace(state, phase=Phase.MANDATORY)
     if isinstance(action, TakeTokens):
         return _apply_take_tokens(state, action.line)
     return state
