@@ -650,10 +650,9 @@ def _resolve_multicolor(state: GameState, card: Card, active: int) -> GameState:
     # Determine which colors are available (bonus.count > 0)
     available_colors = [c for c in GEM_COLORS if ap.bonus.count(c) > 0]
     if not available_colors:
-        # Should not happen if buy was validated, but skip if so
-        return _resolve_abilities(state, card, active)
+        # Should not happen if buy was validated, but continue chain to steal_token
+        return _resolve_steal_token(state, card, active)
 
-    tuple(ChooseMulticolor(color=c) for c in available_colors)
     # Keep pending_buy so we know which card to update after color choice
     return dataclasses.replace(
         state,
@@ -672,7 +671,6 @@ def _resolve_steal_token(state: GameState, card: Card, active: int) -> GameState
         # No tokens to steal, continue to next ability
         return _resolve_take_matching_token(state, card, active)
 
-    tuple(ChooseStealToken(color=c) for c in stealable_colors)
     return dataclasses.replace(
         state,
         phase=Phase.STEAL_TOKEN,
@@ -872,17 +870,9 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     new_ap = dataclasses.replace(new_ap, purchased=new_purchased)
 
     # Grant bonus, prestige, crowns
-    new_bonus = Tokens(
-        white=bonus.white + (1 if card.bonus == Color.WHITE else 0),
-        blue=bonus.blue + (1 if card.bonus == Color.BLUE else 0),
-        green=bonus.green + (1 if card.bonus == Color.GREEN else 0),
-        red=bonus.red + (1 if card.bonus == Color.RED else 0),
-        black=bonus.black + (1 if card.bonus == Color.BLACK else 0),
-        pearl=0,
-        gold=0,
-    )
-    # Multicolor cards have bonus=None, so no bonus granted
     if card.bonus is not None:
+        bonus_increment = Tokens(**{card.bonus.value: 1})
+        new_bonus = bonus + bonus_increment
         new_ap = dataclasses.replace(new_ap, bonus=new_bonus)
     new_ap = dataclasses.replace(
         new_ap,
@@ -1063,11 +1053,11 @@ def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
     new_players[active] = new_ap
 
     # Continue with remaining abilities (steal_token -> take_matching_token -> privilege -> extra_turn)
+    # Keep pending_buy for the chain; _resolve_steal_token receives card explicitly
     return _resolve_steal_token(
         dataclasses.replace(
             state,
             players=tuple(new_players),
-            pending_buy=None,
             pending_ability=None,
         ),
         card,
