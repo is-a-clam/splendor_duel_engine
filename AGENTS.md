@@ -19,6 +19,7 @@ An AI that plays Splendor Duel (two-player). The plan is a deterministic game en
 src/splendor_duel_engine/
   engine/     Game rules, state, legal move generation (pure Python reference)
   agents/     random, greedy heuristic, determinized MCTS, neural agents
+  play/       Terminal human-vs-agent play (HumanAgent, CLI)
   training/   Self-play, replay buffer, network training
   eval/       Round-robin matches, Elo tracking, win-type stats
 engine_rs/    Rust crate (own Cargo.toml), built by maturin and imported as
@@ -36,7 +37,7 @@ pyproject.toml
 uv sync                      # install (dev group: pytest, ruff)
 uv run pytest                # run tests
 uv run ruff check . && uv run ruff format .  # lint and format
-python -m splendor_duel.eval.arena A B -n 200   # play agent A vs agent B, both seats
+python -m splendor_duel_engine.eval.arena A B -n 200   # play agent A vs agent B, both seats
 ```
 
 ## Rules for the engine

@@ -1,0 +1,327 @@
+"""Tests for the greedy heuristic baseline agent (Task 3)."""
+
+from dataclasses import replace
+
+from splendor_duel_engine.agents.base import Agent, play_game
+from splendor_duel_engine.agents.greedy_agent import GreedyAgent
+from splendor_duel_engine.engine.actions import (
+    BuyCard,
+    ChooseMulticolor,
+    ChooseRoyal,
+    DiscardTokens,
+    DoneWithReplenish,
+    PayTokens,
+    Replenish,
+    ReserveCard,
+    TakeTokens,
+    UsePrivilege,
+    apply,
+    decide,
+)
+from splendor_duel_engine.engine.cards import Ability, Card, load_cards
+from splendor_duel_engine.engine.colors import Color, Tokens
+from splendor_duel_engine.engine.observation import observation
+from splendor_duel_engine.engine.phase import Phase
+from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
+
+EMPTY_PYRAMID = ((None,) * 3, (None,) * 4, (None,) * 5)
+
+
+def board_state(**kwargs) -> GameState:
+    st = new_game(0)
+    return replace(st, **kwargs)
+
+
+def synthetic_card(
+    card_id: str,
+    *,
+    points: int = 0,
+    crowns: int = 0,
+    bonus: Color | None = None,
+    cost: Tokens | None = None,
+    ability: Ability | None = None,
+) -> Card:
+    return Card(
+        id=card_id,
+        level=1,
+        points=points,
+        crowns=crowns,
+        bonus=bonus,
+        bonus_count=1 if bonus is not None else 0,
+        ability=ability,
+        is_multicolor=False,
+        cost=Tokens() if cost is None else cost,
+    )
+
+
+def test_greedy_agent_chooses_legal_action():
+    agent = GreedyAgent()
+    assert isinstance(agent, Agent)
+    state = new_game(0)
+    obs = observation(state, state.current_player)
+    dp = decide(state)
+    action = agent.choose_action(obs, dp.legal_actions)
+    assert action in dp.legal_actions
+
+
+def test_greedy_agent_deterministic():
+    agent1 = GreedyAgent()
+    agent2 = GreedyAgent()
+    state = new_game(42)
+    # Play a few turns and verify same choices
+    for _ in range(5):
+        if state.winner is not None:
+            break
+        player = state.current_player
+        obs = observation(state, player)
+        dp = decide(state)
+        a1 = agent1.choose_action(obs, dp.legal_actions)
+        a2 = agent2.choose_action(obs, dp.legal_actions)
+        assert a1 == a2, f"Diverged at phase {dp.phase}: {a1} vs {a2}"
+        state = apply(state, a1)  # apply from engine.actions
+
+
+def test_greedy_agent_full_game_terminates():
+    final = play_game(GreedyAgent(), GreedyAgent(), seed=0)
+    assert final.winner in (0, 1)
+
+
+def test_greedy_never_replenishes_unless_forced_or_scarce_board():
+    # Table rule: only replenish if forced (MANDATORY would have zero legal
+    # actions) AND the bag holds > 5 tokens; otherwise DoneWithReplenish.
+    agent = GreedyAgent()
+
+    # Not forced (board still has tokens) and bag non-empty -> skip replenish
+    st = board_state(current_player=0, phase=Phase.REPLENISH, bag=Tokens(white=6))
+    dp = decide(st)
+    assert any(isinstance(a, Replenish) for a in dp.legal_actions)
+    action = agent.choose_action(observation(st, 0), dp.legal_actions)
+    assert isinstance(action, DoneWithReplenish)
+
+    # Forced (empty board, no gold, nothing affordable) and bag > 5 -> replenish
+    blocked = replace(st, board=(None,) * 25, bag=Tokens(white=6))
+    dp = decide(blocked)
+    action = agent.choose_action(observation(blocked, 0), dp.legal_actions)
+    assert isinstance(action, Replenish)
+
+    # Forced but bag <= 5 -> decline (the engine forces it on the next step)
+    small_bag = replace(st, board=(None,) * 25, bag=Tokens(white=3))
+    dp = decide(small_bag)
+    action = agent.choose_action(observation(small_bag, 0), dp.legal_actions)
+    assert isinstance(action, DoneWithReplenish)
+
+
+def test_greedy_prefers_buying_high_value_affordable_card():
+    # With plenty of gold every non-multicolor pyramid card is affordable;
+    # the agent must buy the one with the highest points*2 + crowns.
+    base = board_state(current_player=0, phase=Phase.MANDATORY)
+    st = replace(
+        base,
+        players=(replace(base.players[0], tokens=Tokens(gold=20)), base.players[1]),
+    )
+    obs = observation(st, 0)
+    best = max(
+        (
+            card
+            for row in obs.pyramid
+            for card in row
+            if card is not None and not card.is_multicolor
+        ),
+        key=lambda card: card.points * 2 + card.crowns,
+    )
+    dp = decide(st)
+    action = GreedyAgent().choose_action(obs, dp.legal_actions)
+    assert isinstance(action, BuyCard)
+    assert action.card.id == best.id
+
+
+def test_greedy_reserves_only_when_gold_needed_and_slots_available():
+    agent = GreedyAgent()
+    jewels, _ = load_cards()
+    six_pointer = next(c for c in jewels if c.points == 6)  # L3-12
+    base = board_state(current_player=0, phase=Phase.MANDATORY)
+
+    # (a) No gold on board -> the engine offers no ReserveCard; take tokens
+    board_a = [None] * 25
+    board_a[0] = Color.RED
+    st_a = replace(base, board=tuple(board_a))
+    dp_a = decide(st_a)
+    assert not any(isinstance(a, ReserveCard) for a in dp_a.legal_actions)
+    action = agent.choose_action(observation(st_a, 0), dp_a.legal_actions)
+    assert isinstance(action, TakeTokens)
+
+    # (b) Gold on board but 3 cards reserved -> still no ReserveCard offered
+    three_reserved = tuple(ReservedCard(card=c, from_deck=False) for c in jewels[:3])
+    board_b = [None] * 25
+    board_b[0] = Color.RED
+    board_b[5] = Color.GOLD
+    st_b = replace(
+        base,
+        board=tuple(board_b),
+        players=(replace(base.players[0], reserved=three_reserved), base.players[1]),
+    )
+    dp_b = decide(st_b)
+    assert not any(isinstance(a, ReserveCard) for a in dp_b.legal_actions)
+    action = agent.choose_action(observation(st_b, 0), dp_b.legal_actions)
+    assert isinstance(action, TakeTokens)
+
+    # (c) Gold on board, free slot, visible 6-point card -> reserve that card
+    board_c = [None] * 25
+    board_c[3] = Color.GOLD
+    st_c = replace(
+        base,
+        board=tuple(board_c),
+        pyramid=((six_pointer, None, None), (None,) * 4, (None,) * 5),
+    )
+    dp_c = decide(st_c)
+    action = agent.choose_action(observation(st_c, 0), dp_c.legal_actions)
+    assert action == ReserveCard(source="pyramid", index=0)
+
+
+def test_greedy_avoids_penalty_unless_high_value_purchase_enabled():
+    # L3-12 costs white=8 and is worth 6 points. A line of 3 white tokens
+    # triggers the penalty (opponent gains a privilege) but is the only way
+    # to make that card affordable in one take.
+    jewels, _ = load_cards()
+    six_pointer = next(c for c in jewels if c.points == 6)
+    agent = GreedyAgent()
+    base = board_state(current_player=0, phase=Phase.MANDATORY, pyramid=EMPTY_PYRAMID)
+
+    def make_state(hand: Tokens) -> GameState:
+        board = [None] * 25
+        board[0] = Color.WHITE
+        board[1] = Color.WHITE
+        board[2] = Color.WHITE  # penalty line of 3
+        board[10] = Color.BLUE  # safe single token
+        return replace(
+            base,
+            board=tuple(board),
+            pyramid=((six_pointer, None, None), (None,) * 4, (None,) * 5),
+            players=(replace(base.players[0], tokens=hand), base.players[1]),
+        )
+
+    # white=5: only the 3-line reaches white=8 -> take the penalty line
+    enabling = make_state(Tokens(white=5))
+    dp = decide(enabling)
+    action = agent.choose_action(observation(enabling, 0), dp.legal_actions)
+    assert action == TakeTokens((0, 1, 2))
+
+    # white=3: no take makes the card affordable -> avoid the penalty line
+    # (among penalty-free options the table's scoring picks the 2-white line)
+    safe = make_state(Tokens(white=3))
+    dp = decide(safe)
+    action = agent.choose_action(observation(safe, 0), dp.legal_actions)
+    assert isinstance(action, TakeTokens)
+    assert action != TakeTokens((0, 1, 2))
+
+
+def test_greedy_multicolor_chooses_most_bonus_color():
+    # Agent has bonus: 3 white, 1 blue; multicolor card -> should choose white
+    base = board_state(current_player=0)
+    st = replace(
+        base,
+        players=(
+            replace(base.players[0], bonus=Tokens(white=3, blue=1)),
+            base.players[1],
+        ),
+    )
+    obs = observation(st, 0)
+    legal = (ChooseMulticolor(Color.BLUE), ChooseMulticolor(Color.WHITE))
+    assert GreedyAgent().choose_action(obs, legal) == ChooseMulticolor(Color.WHITE)
+
+
+def test_greedy_discard_prefers_excess_colors_not_needed():
+    # Hand has 12 tokens, must discard 2; 4 red (not needed), 3 blue (needed
+    # by the only affordable card) -> discard reds first.
+    blue_card = synthetic_card("test-blue", cost=Tokens(blue=4))
+    base = board_state(
+        current_player=0,
+        phase=Phase.DISCARD,
+        pyramid=EMPTY_PYRAMID,
+    )
+    st = replace(
+        base,
+        players=(
+            replace(
+                base.players[0],
+                tokens=Tokens(red=4, blue=3, green=2, white=2, gold=1),
+                reserved=(ReservedCard(card=blue_card, from_deck=False),),
+            ),
+            base.players[1],
+        ),
+    )
+    obs = observation(st, 0)
+    dp = decide(st)
+    action = GreedyAgent().choose_action(obs, dp.legal_actions)
+    assert action == DiscardTokens(tokens=Tokens(red=2))
+
+
+def test_greedy_use_privileges_takes_needed_color_for_best_affordable_card():
+    # Reserved card costs red=4; with red=3 + gold=1 it is affordable and the
+    # only missing color is red -> the privilege must take a red token.
+    red_card = synthetic_card("test-red", cost=Tokens(red=4))
+    base = board_state(
+        current_player=0, phase=Phase.USE_PRIVILEGES, pyramid=EMPTY_PYRAMID
+    )
+    board = [None] * 25
+    board[0] = Color.WHITE
+    board[5] = Color.BLUE
+    board[7] = Color.RED
+    st = replace(
+        base,
+        board=tuple(board),
+        players=(
+            replace(
+                base.players[0],
+                tokens=Tokens(red=3, gold=1),
+                privileges=1,
+                reserved=(ReservedCard(card=red_card, from_deck=False),),
+            ),
+            base.players[1],
+        ),
+    )
+    dp = decide(st)
+    action = GreedyAgent().choose_action(observation(st, 0), dp.legal_actions)
+    assert action == UsePrivilege(index=7)
+
+
+def test_greedy_use_privileges_takes_contested_color_when_nothing_affordable():
+    # Nothing affordable -> take the least abundant non-gold color on board.
+    base = board_state(
+        current_player=0, phase=Phase.USE_PRIVILEGES, pyramid=EMPTY_PYRAMID
+    )
+    board = [None] * 25
+    board[0] = Color.WHITE
+    board[1] = Color.WHITE
+    board[2] = Color.WHITE  # white x3
+    board[5] = Color.BLUE
+    board[6] = Color.BLUE  # blue x2
+    board[10] = Color.RED  # red x1 -> contested
+    st = replace(
+        base,
+        board=tuple(board),
+        players=(replace(base.players[0], privileges=1), base.players[1]),
+    )
+    dp = decide(st)
+    action = GreedyAgent().choose_action(observation(st, 0), dp.legal_actions)
+    assert action == UsePrivilege(index=10)
+
+
+def test_greedy_royal_prefers_extra_turn_ability():
+    base = board_state(current_player=0)
+    obs = observation(base, 0)
+    extra = next(r for r in obs.royals_available if r.ability == Ability.EXTRA_TURN)
+    no_ability = next(r for r in obs.royals_available if r.ability is None)
+    legal = (ChooseRoyal(royal_id=no_ability.id), ChooseRoyal(royal_id=extra.id))
+    assert GreedyAgent().choose_action(obs, legal) == ChooseRoyal(royal_id=extra.id)
+
+
+def test_greedy_payment_prefers_fewest_gold_then_fewest_tokens():
+    base = board_state(current_player=0)
+    obs = observation(base, 0)
+    legal = (
+        PayTokens(payment=Tokens(gold=4)),
+        PayTokens(payment=Tokens(white=2, gold=2)),
+        PayTokens(payment=Tokens(white=4)),
+    )
+    assert GreedyAgent().choose_action(obs, legal) == PayTokens(payment=Tokens(white=4))
