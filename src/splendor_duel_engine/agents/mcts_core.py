@@ -143,7 +143,12 @@ def playout(
     agent0 = policy_factory(agent_seed)
     agent1 = policy_factory(agent_seed)
 
-    final = play_game_from_state(state, agent0, agent1, branch_rng)
+    try:
+        # Use a higher turn limit for playouts to avoid premature termination
+        final = play_game_from_state(state, agent0, agent1, branch_rng, max_turns=1000)
+    except RuntimeError:
+        # Playout exceeded turn limit — treat as draw
+        return 0.5
 
     if final.winner is None:
         return 0.5
@@ -194,9 +199,7 @@ def mcts_search(
     """
     # Handle terminal root state
     if root_state.winner is not None:
-        # Game is already over; return a dummy legal action (should not happen in practice)
-        # but we need to return something. Get legal actions from a non-terminal copy.
-        # Actually, this case should never be called in practice.
+        # Game is already over
         raise ValueError("mcts_search called on terminal state")
 
     root = MCTSNode(state=root_state, parent=None, action=None)
@@ -210,8 +213,14 @@ def mcts_search(
         elif not node.is_fully_expanded():
             # Leaf node that can be expanded
             node = expand(node, rng)
-            result = playout(node.state, rng, playout_policy)
-            backpropagate(node, result)
+            if node.is_terminal():
+                # Expanded node is terminal (action ended the game) — backpropagate directly
+                current_player = root_state.current_player
+                result = 1.0 if node.state.winner == current_player else 0.0
+                backpropagate(node, result)
+            else:
+                result = playout(node.state, rng, playout_policy)
+                backpropagate(node, result)
         else:
             # This branch should be unreachable: uct_select guarantees we only
             # reach here for terminal or not-fully-expanded nodes.

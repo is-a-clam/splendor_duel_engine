@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from splendor_duel_engine.engine.cards import Card
 from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.observation import Observation
+from splendor_duel_engine.engine.observation import Observation, PlayerView
 from splendor_duel_engine.engine.state import GameState, PlayerState, ReservedCard
 
 # Constants from engine: fixed census per rules
@@ -36,12 +36,27 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
     opp_reserved = _sample_opponent_reserved(observation, rng, decks)
 
     # --- Build player states ---
-    player0 = _build_player_state(
-        observation.you, is_current=True, reserved_hidden=observation.your_reserved_deck
-    )
-    player1 = _build_player_state(
-        observation.opponent, is_current=False, reserved_hidden=opp_reserved
-    )
+    current_player = observation.current_player
+    # Build player states in the correct order (index 0 = player 0, index 1 = player 1)
+    if current_player == 0:
+        player0 = _build_player_state(
+            observation.you,
+            is_current=True,
+            reserved_hidden=observation.your_reserved_deck,
+        )
+        player1 = _build_player_state(
+            observation.opponent, is_current=False, reserved_hidden=opp_reserved
+        )
+    else:
+        # current_player == 1: "you" is player 1, "opponent" is player 0
+        player1 = _build_player_state(
+            observation.you,
+            is_current=True,
+            reserved_hidden=observation.your_reserved_deck,
+        )
+        player0 = _build_player_state(
+            observation.opponent, is_current=False, reserved_hidden=opp_reserved
+        )
 
     # --- Create fresh RNG for this determinization (split from input) ---
     det_rng = random.Random(rng.randint(0, 2**31 - 1))
@@ -275,7 +290,7 @@ def _sample_opponent_reserved(
 
 
 def _build_player_state(
-    view: Observation.PlayerView,
+    view: PlayerView,
     *,
     is_current: bool,
     reserved_hidden: tuple[Card, ...] | list[ReservedCard] | None = None,

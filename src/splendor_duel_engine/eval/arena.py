@@ -8,11 +8,13 @@ from typing import Any
 
 from splendor_duel_engine.agents.base import Agent, play_game
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
+from splendor_duel_engine.agents.mcts_agent import MCTSAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
 
 AGENT_REGISTRY: dict[str, Callable[[], Agent]] = {
     "random": lambda: RandomAgent(seed=None),
     "greedy": GreedyAgent,
+    "mcts": lambda: MCTSAgent(seed=None),
 }
 
 
