@@ -194,17 +194,16 @@ class HumanAgent:
             self.print_fn(f"{i}) {describe(action, observation)}")
 
         while True:
-            raw = self.input_fn("")
+            try:
+                raw = self.input_fn("")
+            except (StopIteration, EOFError):
+                self.print_fn("input terminated")
+                raise SystemExit("input terminated")
             try:
                 choice = int(str(raw).strip())
             except (ValueError, TypeError):
                 self.print_fn("invalid choice")
                 continue
-            # Accept 0 or 1 for a single-option menu so that scripted
-            # "1" answers (common in full-game tests) resolve cleanly while
-            # still rejecting clearly out-of-range / non-numeric input.
-            if len(legal_actions) == 1 and choice in (0, 1):
-                return legal_actions[0]
             if choice < 0 or choice >= len(legal_actions):
                 self.print_fn("invalid choice")
                 continue
