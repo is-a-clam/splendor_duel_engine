@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, stdlib only (no runtime deps), pytest + ruff via uv dev dependency group.
 
-**Spec:** `docs/specs/splendor-duel-rules.md` — every task cites it. All card data in `src/splendor_duel_engine/engine/cards.json` is field-verified against the official BGA implementation; do not alter card values, only the one schema change pinned in Task 1.
+**Spec:** `docs/specs/splendor-duel-rules.md` — every task cites it. All card data in `src/splendor_duel_engine/engine/cards.json` is field-verified against the official BGA implementation; **no** edit to it is sanctioned (Ruling R3: the file stays byte-identical to baseline, and multicolor is modelled in the loader instead).
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 - Deck order convention: `decks[level][-1]` is the top card (pop from the end).
 - Type hints on all public functions; ruff clean (`uv run ruff check . && uv run ruff format .`); tests pass (`uv run pytest`).
 - No end-game bonus scoring, no tiebreaker, no purse (spec: verified absent).
-- `cards.json` values are immutable data; the only sanctioned edit is the schema change in Task 1, citing the spec.
+- `cards.json` values are immutable data; **no** edit to it is sanctioned. Multicolor is modelled in the loader as `Card.is_multicolor`, derived from `"bonus": "joker"` (Ruling R3).
 
 ## Review Focus
 
@@ -37,7 +37,7 @@ These are the failure modes no single task naturally exercises; each is pinned t
 
 **Files:**
 - Modify: `pyproject.toml` (remove `[project.scripts]`, add dev group)
-- Modify: `src/splendor_duel_engine/engine/cards.json` (9 multicolor cards get `ability: "multicolor"`)
+- Modify: none — `cards.json` is verified data and stays byte-identical; multicolor is already encoded by `bonus: "joker"` (Ruling R3)
 - Create: `src/splendor_duel_engine/engine/colors.py`
 - Create: `src/splendor_duel_engine/engine/cards.py`
 - Test: `tests/test_cards.py`
@@ -47,8 +47,8 @@ These are the failure modes no single task naturally exercises; each is pinned t
   - `class Color(enum.Enum)`: `WHITE, BLUE, GREEN, RED, BLACK, PEARL, GOLD` (str values matching cards.json keys).
   - `GEM_COLORS: tuple[Color, ...]` — the 5 gems, no pearl/gold.
   - `@dataclass(frozen=True, slots=True) class Tokens`: fields `white, blue, green, red, black, pearl, gold: int = 0`; methods `count(color: Color) -> int`, `total() -> int`, `__add__(other: Tokens) -> Tokens`, `__sub__(other: Tokens) -> Tokens`. Hashable (used in state and action types).
-  - `class Ability(enum.Enum)`: `EXTRA_TURN, TAKE_MATCHING_TOKEN, STEAL_TOKEN, PRIVILEGE, MULTICOLOR` (str values matching cards.json).
-  - `@dataclass(frozen=True, slots=True) class Card`: `id: str, level: int, points: int, crowns: int, bonus: Color | None, bonus_count: int, ability: Ability | None, cost: Tokens`. `bonus is None` iff `ability is Ability.MULTICOLOR`.
+  - `class Ability(enum.Enum)`: `EXTRA_TURN, TAKE_MATCHING_TOKEN, STEAL_TOKEN, PRIVILEGE` (str values matching cards.json). Multicolor is deliberately **not** a member: it is orthogonal to the four printed abilities (Ruling R3).
+  - `@dataclass(frozen=True, slots=True) class Card`: `id: str, level: int, points: int, crowns: int, bonus: Color | None, bonus_count: int, ability: Ability | None, is_multicolor: bool, cost: Tokens`. `bonus is None` covers both multicolor cards (`is_multicolor=True`, `bonus_count >= 1`) and colorless no-bonus cards (`is_multicolor=False`, `bonus_count == 0`).
   - `@dataclass(frozen=True, slots=True) class RoyalCard`: `id: str, points: int, ability: Ability | None`.
   - `def load_cards() -> tuple[tuple[Card, ...], tuple[RoyalCard, ...]]` — jewel cards in file order, then royals. Raises `ValueError` on any validation failure.
 
@@ -66,10 +66,15 @@ def test_deck_composition():
 
 def test_multicolor_cards():
     jewels, _ = load_cards()
-    multi = [c for c in jewels if c.ability is Ability.MULTICOLOR]
+    multi = [c for c in jewels if c.is_multicolor]
     assert len(multi) == 9                      # spec: 9 copy-bonus cards
-    assert all(c.bonus is None for c in multi)
-    assert all(c.bonus is not None for c in jewels if c.ability is not Ability.MULTICOLOR)
+    assert all(c.bonus is None and c.bonus_count >= 1 for c in multi)
+    # multicolor is orthogonal to abilities: L3-01 is multicolor AND extra_turn (Ruling R3)
+    assert [c.id for c in multi if c.ability is not None] == ["L3-01"]
+    # the colorless no-bonus cards have no colour bonus and are not multicolor
+    colorless = [c for c in jewels if not c.is_multicolor and c.bonus is None]
+    assert sorted(c.id for c in colorless) == ["L1-29", "L2-23", "L3-12"]
+    assert all(c.bonus_count == 0 for c in colorless)
 
 def test_royal_cards():
     _, royals = load_cards()
@@ -92,7 +97,7 @@ Run: `uv run pytest tests/test_cards.py -v` — expected: FAIL (imports missing)
 
 - [ ] **Step 3: Edit `pyproject.toml` and `cards.json`; implement `colors.py` and `cards.py`**
 
-pyproject: delete the `[project.scripts]` section (no `main` exists); add `[dependency-groups] dev = ["pytest>=8", "ruff>=0.1"]`. cards.json: set `"ability": "multicolor"` on the 9 cards whose `bonus` is `"joker"` (spec §Card abilities; change cites the spec, values untouched). Loader maps `bonus: "joker"` → `bonus=None`; validates the counts in the two tests above plus "cost keys ⊆ colors ∪ {pearl}" and "id uniqueness", raising `ValueError` with the failing expectation in the message.
+pyproject: delete the `[project.scripts]` section (no `main` exists); add `[dependency-groups] dev = ["pytest>=8", "ruff>=0.1"]`. `cards.json` is **not** edited: it is field-verified data and multicolor is already encoded as `bonus: "joker"` (Ruling R3); the loader maps `"joker"` → `bonus=None, is_multicolor=True`. It validates the counts in the two tests above plus "cost keys ⊆ colors ∪ {pearl}" and "id uniqueness", raising `ValueError` with the failing expectation in the message.
 
 - [ ] **Step 4: Run tests, lint**
 
@@ -269,7 +274,7 @@ git add -A && git commit -m "feat: step API and take-tokens action with penalty 
 ### Task 4: Privileges, replenish, and forced replenish
 
 **Files:**
-- Modify: `src/splendor_duel_engine/engine/actions.py`
+- Modify: `src/splendor_duel_engine/engine/actions.py`, `src/splendor_duel_engine/engine/phase.py`
 - Test: `tests/test_privileges_replenish.py`
 
 **Interfaces:**
@@ -281,13 +286,15 @@ git add -A && git commit -m "feat: step API and take-tokens action with penalty 
 `tests/test_privileges_replenish.py`:
 
 ```python
-def test_use_privilege_takes_one_chosen_non_gold_board_token():
-    st = ...  # player holds 1 privilege
+def test_use_privilege_takes_chosen_non_gold_board_token_by_index():
+    st = ...  # player holds 1 privilege, board has non-gold tokens
     dp = decide(st)
     assert dp.phase is Phase.USE_PRIVILEGES
-    take = next(a for a in dp.legal_actions if isinstance(a, UsePrivilege))
-    assert Color.GOLD not in {a.color for a in dp.legal_actions if isinstance(a, UsePrivilege)}
-    st2 = apply(st, take)
+    # Legal actions are UsePrivilege(index) for each non-gold, non-empty board index
+    take_actions = [a for a in dp.legal_actions if isinstance(a, UsePrivilege)]
+    assert len(take_actions) > 0
+    assert all(st.board[a.index] is not None and st.board[a.index] != Color.GOLD for a in take_actions)
+    st2 = apply(st, take_actions[0])
     assert st2.players[st.current_player].privileges == 0
     # chosen token moved board -> hand
 
@@ -297,13 +304,13 @@ def test_multiple_privileges_used_one_at_a_time():
 def test_done_with_privileges_advances_to_replenish():
     # bag non-empty -> REPLENISH phase with Replenish and DoneWithReplenish both legal
 
-def test_replenish_fills_from_bag_along_spiral_and_grants_opponent_privilege():
-    # board with 3 empty slots, bag with 3 tokens
+def test_replenish_fills_randomly_from_bag_using_rng_and_grants_opponent_privilege():
+    # board with empty slots, bag with tokens
+    # Replenish draws tokens from bag randomly (using state.rng), places them along SPIRAL order
+    # Bag should be empty after (all 25 tokens on board)
     st2 = apply(st, Replenish())
-    filled = [i for i in SPIRAL if st.board[i] is None][:3]   # first empties along spiral (center-out)
-    assert all(st2.board[i] is not None for i in filled)
     assert st2.bag.total() == 0
-    assert st2.players[1 - st.current_player].privileges == old + 1  # spec: opponent takes 1
+    assert st2.players[1 - st.current_player].privileges == old + 1
 
 def test_replenish_illegal_when_bag_empty():
     dp = decide(state_with_empty_bag)
@@ -314,6 +321,35 @@ def test_forced_replenish_when_no_mandatory_action():
     st2 = decide(st)
     assert st2.phase is Phase.REPLENISH
     assert [type(a) for a in st2.legal_actions] == [Replenish]
+
+def test_take_tokens_penalty_uses_grant_privilege():
+    # 3 same-color or 2 pearls -> opponent gains privilege via _grant_privilege
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `uv run pytest tests/test_privileges_replenish.py -v` — expected: FAIL (no such phases/transitions).
+
+- [ ] **Step 3: Implement privilege and replenish transitions**
+
+Wire the `USE_PRIVILEGES` and `REPLENISH` phases into `decide`/`apply`.
+
+**USE_PRIVILEGES**: `decide` enumerates `UsePrivilege(index)` for every board index with a non-gold, non-empty token. `apply(UsePrivilege(index))` validates the index, moves that specific token to player's hand, decrements privilege. Stays in `USE_PRIVILEGES` if more privileges remain, else advances to `REPLENISH`.
+
+**REPLENISH**: `apply(Replenish())` collects all tokens from bag into a list, shuffles that list with `state.rng`, collects all empty board indices in SPIRAL order (not shuffled), places tokens from shuffled list onto empty slots in SPIRAL order (bag becomes empty since total tokens = 25 = board size). Then grants opponent 1 privilege via `_grant_privilege`. Advances to `MANDATORY`.
+
+**Forced replenish**: In `MANDATORY`, if no legal take/reserve/buy actions and `bag.total() > 0`, return `REPLENISH` with only `Replenish` legal.
+
+**Penalty refactor**: `_apply_take_tokens` must call `_grant_privilege` instead of duplicating logic.
+
+- [ ] **Step 4: Run tests, lint**
+
+Run: `uv run pytest tests/test_privileges_replenish.py tests/test_take_tokens.py -v && uv run ruff check .` — expected: PASS (no regressions).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A && git commit -m "feat: privilege usage, replenish, forced replenish (spec: turn structure)"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -339,15 +375,24 @@ git add -A && git commit -m "feat: privilege usage, replenish, forced replenish 
 ### Task 5: Reserve and buy (with payment step)
 
 **Files:**
-- Modify: `src/splendor_duel_engine/engine/actions.py`
-- Test: `tests/test_reserve.py`, `tests/test_buy.py`
+- Modify: `src/splendor_duel_engine/engine/actions.py`, `src/splendor_duel_engine/engine/state.py`, `src/splendor_duel_engine/engine/phase.py`
+- Test: `tests/test_reserve.py`, `tests/test_buy.py`, `tests/test_choose_gold.py` (new)
 
 **Interfaces:**
 - Consumes: Tasks 3–4.
 - Produces:
-  - `MANDATORY` now also enumerates `BuyCard(card_id)` (affordable cards from own reserved + pyramid) and `ReserveCard(source, index)`.
-  - New phase `CHOOSE_PAYMENT`: `BuyCard` sets `pending` to the chosen card; `decide` then enumerates `PayTokens(payment)` for every legal payment. A payment is legal iff, after subtracting per-gem bonuses (`min 0` per color, pearls never reduced), the remaining cost is covered by the payment's gold count. Gold is wild: `PayTokens` is validated against all possible gold assignments.
+  - `MANDATORY` now also enumerates `BuyCard(card, source)` (affordable cards from own reserved + pyramid) and `ReserveCard(source, index)`.
+  - New phase `CHOOSE_GOLD`: after `ReserveCard`, player chooses which gold token to take from board via `ChooseGold(index)`.
+  - New phase `CHOOSE_PAYMENT`: `BuyCard` sets `pending_buy` to the chosen `BuyCard` action; `decide` then enumerates `PayTokens(payment)` for every legal payment. A payment is legal iff, after subtracting per-gem bonuses (`min 0` per color, pearls never reduced), the remaining cost is covered by the payment's gold count. Gold is wild: `PayTokens` is validated against all possible gold assignments.
   - Pyramid purchase refills the slot from that deck (if any); reserve takes gold from the board *first* (only gold source), then a pyramid card (slot refills) or a deck top card (no refill). Multicolor purchase *restriction* is enforced here (cannot buy without an owned colored bonus); the chosen-color decision arrives in Task 6.
+
+**Action changes:**
+- `UsePrivilege(index: int)` — player chooses exact board index (Task 4)
+- `BuyCard(card: Card, source: str)` — includes full Card and source ("reserved" or "pyramid_r_c")
+- `ReserveCard(source: str, index: int)` — unchanged
+- `ChooseGold(index: int)` — NEW, for selecting which gold token during reserve
+- `GameState.pending_buy: BuyCard | None` — REPLACES `pending: Card | None`
+- `GameState.pending_reserve: ReserveCard | None` — NEW for CHOOSE_GOLD
 
 - [ ] **Step 1: Write failing tests**
 
@@ -355,11 +400,20 @@ git add -A && git commit -m "feat: privilege usage, replenish, forced replenish 
 
 ```python
 def test_reserve_requires_gold_on_board(): ...        # no gold -> ReserveCard not in legal actions
-def test_reserve_takes_gold_then_pyramid_card_and_refills(): ...
+def test_reserve_enters_choose_gold_phase(): ...      # ReserveCard -> CHOOSE_GOLD phase
+def test_reserve_from_pyramid_refills_slot(): ...     # after ChooseGold, pyramid refills
 def test_reserve_from_deck_top_does_not_refill(): ...
 def test_reserve_illegal_at_three_reserved(): ...
 def test_reserved_cards_are_in_own_player_state_and_turn_passes(): ...
 def test_multicolor_may_be_reserved_without_owning_bonus(): ...  # spec: restriction applies at purchase only
+```
+
+`tests/test_choose_gold.py` (NEW):
+
+```python
+def test_choose_gold_enumerates_all_gold_indices(): ...
+def test_choose_gold_takes_specific_gold_token(): ...
+def test_choose_gold_completes_reserve_and_passes_turn(): ...
 ```
 
 `tests/test_buy.py`:
@@ -381,11 +435,21 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `uv run pytest tests/test_reserve.py tests/test_buy.py -v` — expected: FAIL.
+Run: `uv run pytest tests/test_reserve.py tests/test_buy.py tests/test_choose_gold.py -v` — expected: FAIL.
 
 - [ ] **Step 3: Implement reserve, buy, and the payment decision point**
 
-Add buyable-card enumeration (own reserved + pyramid; affordability = `cost - bonus` per gem color covered by hand incl. wild gold; multicolor requires an owned colored bonus). `ReserveCard`: validate gold-on-board and `< 3` reserved, take gold from board, take the card, wrap it in `ReservedCard(card, from_deck=<source is a deck top>)`, refill the pyramid slot if source was the pyramid. `PayTokens`: validate as described, move spent tokens to the bag, hand the card to `purchased` (`PurchasedCard(card, chosen_color=None)`), add bonus/prestige/crowns, refill pyramid slot on pyramid buys, then return to `USE_PRIVILEGES` with the player unchanged (Task 6 inserts ability resolution here).
+**Reserve flow:**
+1. `MANDATORY` enumerates `ReserveCard(source, index)` for legal reserves (gold on board, <3 reserved)
+2. `apply(ReserveCard)` sets `pending_reserve = action`, enters `CHOOSE_GOLD` phase
+3. `CHOOSE_GOLD` enumerates `ChooseGold(index)` for each gold token on board
+4. `apply(ChooseGold(index))` takes that gold, completes the reserve (adds card to reserved with `from_deck`, refills pyramid if source was pyramid), clears `pending_reserve`, advances to opponent's `USE_PRIVILEGES`
+
+**Buy flow:**
+1. `MANDATORY` enumerates `BuyCard(card, source)` for affordable cards (own reserved + pyramid)
+2. `apply(BuyCard)` sets `pending_buy = action`, enters `CHOOSE_PAYMENT`
+3. `CHOOSE_PAYMENT` enumerates `PayTokens(payment)` for all legal payments
+4. `apply(PayTokens)` validates payment, moves tokens to bag, removes card from source, refills pyramid if needed, creates `PurchasedCard(card, chosen_color=None)`, grants bonus/prestige/crowns (multicolor bonus deferred to Task 6), checks win conditions, returns to `USE_PRIVILEGES` (Task 6 inserts ability resolution here)
 
 - [ ] **Step 4: Run tests, lint**
 
@@ -412,7 +476,7 @@ git add -A && git commit -m "feat: reserve and buy with payment decision point (
   - `TAKE_MATCHING_TOKEN`: auto-take 1 board token of the card's bonus color if present (no decision point; ignored otherwise — spec).
   - `PRIVILEGE`: `_grant_privilege` on the buyer.
   - `STEAL_TOKEN`: new phase `STEAL_TOKEN` enumerating `ChooseStealToken(color)` for each non-gold token color the opponent holds; gold immune (spec).
-  - `MULTICOLOR`: new phase `MULTICOLOR_COLOR` enumerating `ChooseMulticolor(color)` for each color with `bonus.count(color) > 0`; sets `PurchasedCard.chosen_color`, which adds `bonus_count` of that color to the buyer's bonus and makes the card's prestige count toward that color's 10-point total (Task 8 win check reads `chosen_color`).
+  - `is_multicolor` (a card property, not an `Ability`; Ruling R3): new phase `MULTICOLOR_COLOR` enumerating `ChooseMulticolor(color)` for each color with `bonus.count(color) > 0`; sets `PurchasedCard.chosen_color`, which adds `bonus_count` of that color to the buyer's bonus and makes the card's prestige count toward that color's 10-point total (Task 8 win check reads `chosen_color`).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -427,7 +491,8 @@ def test_steal_ignored_when_opponent_has_no_tokens(): ...
 def test_multicolor_choose_color_adds_bonus_and_counts_for_that_color():
     # after ChooseMulticolor(RED): buyer bonus.red += card.bonus_count; card prestige counts toward RED (Task 8 reads this)
 def test_multicolor_copies_only_bonus_not_ability():
-    # a multicolor card has ability MULTICOLOR; after resolution no extra ability fires (spec)
+    # multicolor copies the bonus, never an ability: a multicolor-only card fires no
+    # extra ability, while L3-01 (multicolor + extra_turn) still plays again (Ruling R3)
 def test_bought_card_ability_resolves_before_next_player_turns(): ...
 ```
 
@@ -437,7 +502,7 @@ Run: `uv run pytest tests/test_abilities.py -v` — expected: FAIL.
 
 - [ ] **Step 3: Implement ability resolution chain**
 
-After `PayTokens` succeeds: resolve abilities in a fixed order — `MULTICOLOR` (decision point) / `STEAL_TOKEN` (decision point) / `TAKE_MATCHING_TOKEN` / `PRIVILEGE` (immediate) / `EXTRA_TURN` (flag) — then return to `USE_PRIVILEGES`. If a decision point phase is entered, store enough in `pending`/a new `pending_ability` field (add `pending_ability: Ability | None` to `GameState`) to resume after the choice. On `extra_turn`, the end-of-turn transition (still the simple one from Task 3) keeps `current_player` and clears the flag; otherwise advance the seat.
+After `PayTokens` succeeds: resolve abilities in a fixed order — multicolor colour choice (if `card.is_multicolor`; decision point) / `STEAL_TOKEN` (decision point) / `TAKE_MATCHING_TOKEN` / `PRIVILEGE` (immediate) / `EXTRA_TURN` (flag) — then return to `USE_PRIVILEGES`. If a decision point phase is entered, store enough in `pending`/a new `pending_ability` field (add `pending_ability: Ability | None` to `GameState`) to resume after the choice. On `extra_turn`, the end-of-turn transition (still the simple one from Task 3) keeps `current_player` and clears the flag; otherwise advance the seat.
 
 - [ ] **Step 4: Run tests, lint**
 
@@ -446,7 +511,7 @@ Run: `uv run pytest -v && uv run ruff check .` — expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A && git commit -m "feat: five card abilities incl. multicolor chosen-color accounting (spec: abilities)"
+git add -A && git commit -m "feat: four card abilities plus multicolor chosen-color accounting (spec: abilities)"
 ```
 
 ---
@@ -661,3 +726,37 @@ Run: `uv run pytest -v && uv run ruff check .` — expected: all PASS, including
 ```bash
 git add -A && git commit -m "feat: seeded random-play invariant fuzz harness"
 ```
+
+---
+
+## Future Notes / Refactoring Ideas
+
+These are not required for the current plan but should be considered for future improvements:
+
+### 1. Type-safe tuple construction for players (from code review)
+**Pattern**: In `_grant_privilege` (actions.py:374), new players tuples are created as:
+```python
+new_players = [players[0], players[1]]
+```
+This is more type-safe than the common pattern:
+```python
+new_players_list = list(state.players)
+new_players_list[active] = new_ap
+players=tuple(new_players_list),
+```
+**Reason**: Direct indexing (`[0]`, `[1]`) makes it explicit that we're working with a 2-element tuple, catches index errors at edit time, and avoids the `list` → `tuple` round-trip. Apply this pattern consistently when modifying `state.players` (which is always `tuple[PlayerState, PlayerState]`).
+
+### 2. Consider extracting `_replace_player(state, player_idx, new_player_state) -> GameState` helper
+Many functions do the same `list(state.players)` → modify → `tuple(...)` → `dataclasses.replace(state, players=...)`. A small helper would reduce boilerplate and ensure consistency.
+
+### 3. Add `extra_turn` handling to `USE_PRIVILEGES` → `REPLENISH` → `MANDATORY` transition logic
+Currently `extra_turn` is consumed in `DoneWithReplenish`. If we add more phases before `USE_PRIVILEGES` (e.g., discard), ensure the flag is still consumed correctly.
+
+### 4. Payment enumeration optimization (Task 5 minor)
+The brute-force `_enumerate_legal_payments` with 6 nested loops is correct but could be optimized for larger token counts. Not a bottleneck yet.
+
+### 5. Win condition per-color check caching (Task 5 minor)
+The "10 points in single color" win check iterates all purchased cards each time. Could cache per-color points in `PlayerState` for O(1) check. Not a bottleneck yet.
+
+### 6. Agents module scaffolding (post-Task 10)
+The `tests/agents/` directory was removed as it referenced `engine.observation` (Task 9). Re-add when implementing agents (Task 11+).
