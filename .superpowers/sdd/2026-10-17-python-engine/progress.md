@@ -11,7 +11,7 @@ Branch: feat/python-engine (repo git-initialized this session; baseline commit 4
 - [x] Task 4: Privileges, replenish, forced replenish
 - [x] Task 5: Reserve and buy (with payment step)
 - [x] Task 6: Card abilities and multicolor accounting
-- [ ] Task 7: Royal cards at 3rd and 6th crowns
+- [x] Task 7: Royal cards at 3rd and 6th crowns
 - [ ] Task 8: End-of-turn sequence and win conditions
 - [ ] Task 9: Observation API (hidden information)
 - [ ] Task 10: Seeded random-play invariant fuzz harness
@@ -94,3 +94,6 @@ Task 5: minor (deferred): Payment enumeration complexity noted; win condition pe
 
 Task 6: complete (commits 9f906c2..cff57d6, review clean after 2 fix rounds)
 Task 6: minor (deferred): `tests/agents/test_base.py` historical deletion (agents module not yet implemented); not blocking.
+
+Task 7: complete (commits e60143b..a553b28, review clean)
+Task 7: minor (deferred): None from implementation. Royal triggers check crown thresholds (crossing 3 or 6), CHOOSE_ROYAL phase enumerates available royals, royal abilities resolved with existing machinery. All 84 tests pass including new royal tests.
