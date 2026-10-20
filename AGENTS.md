@@ -56,6 +56,7 @@ python -m splendor_duel_engine.eval.arena A B -n 200   # play agent A vs agent B
 - Prefer plain dataclasses or NamedTuples for state, with no hidden mutation.
 - Never change game rules or card data silently. If something in the rulebook is ambiguous, leave a clear TODO and ask.
 - Do not add dependencies without a good reason, and mention it when you do.
+- **Update `README.md`** when adding/removing CLI commands, changing command signatures, adding new agents or modules, or modifying user-facing APIs. The README is the single source of truth for users.
 
 ## Testing and evaluation
 

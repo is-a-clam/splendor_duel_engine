@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 from collections.abc import Callable
 
 from splendor_duel_engine.agents.base import Agent, play_game
@@ -42,7 +43,7 @@ def _card_summary(card) -> str:
     )
     ability = card.ability.value if card.ability else "-"
     return (
-        f"{card.points}pt crowns={card.crowns} bonus={bonus} "
+        f"{card.points}pt crowns={card.crowns} bonus={bonus} count={card.bonus_count} "
         f"cost={_fmt_tokens(card.cost)} ability={ability}"
     )
 
@@ -137,6 +138,17 @@ class HumanAgent:
             + f" privileges={obs.you.privileges}"
             + f" reserved={len(obs.you.reserved_public) + obs.you.reserved_deck_count}"
         )
+                # Reserved cards for current player
+        self.print_fn("Your reserved cards:")
+        if obs.you.reserved_public or getattr(obs, "your_reserved_deck", None):
+            for i, card in enumerate(obs.you.reserved_public):
+                self.print_fn(f"  [P,{i}] {_card_summary(card)}")
+            your_deck = getattr(obs, "your_reserved_deck", ())
+            for i, card in enumerate(your_deck):
+                self.print_fn(f"  [D,{i}] {_card_summary(card)}")
+        else:
+            self.print_fn("  (none)")
+
         self.print_fn(
             "Opponent: tokens="
             + _fmt_tokens(obs.opponent.tokens)
@@ -147,21 +159,33 @@ class HumanAgent:
             + f" reserved_public={len(obs.opponent.reserved_public)}"
             + f" reserved_deck={obs.opponent.reserved_deck_count}"
         )
+
+        # Opponent reserved cards (only public ones visible)
+        self.print_fn("Opponent reserved cards:")
+        if obs.opponent.reserved_public:
+            for i, card in enumerate(obs.opponent.reserved_public):
+                self.print_fn(f"  [P,{i}] {_card_summary(card)}")
+        if obs.opponent.reserved_deck_count:
+            for i in range(obs.opponent.reserved_deck_count):
+                self.print_fn(f"  [D,{i}] (face-down)")
+        if not obs.opponent.reserved_public and not obs.opponent.reserved_deck_count:
+            self.print_fn("  (none)")
+
         self.print_fn("Board (index:color):")
         for r in range(5):
             cells = []
             for c in range(5):
                 idx = r * 5 + c
                 color = obs.board[idx]
-                label = color.value[0].upper() if color is not None else "."
+                label = color.value[0].upper() + color.value[1].lower() if color is not None else ".."
                 cells.append(f"{idx:>2}:{label}")
             self.print_fn("  " + " ".join(cells))
         self.print_fn("Pyramid:")
-        for row in obs.pyramid:
-            self.print_fn(
-                "  "
-                + " | ".join(_card_summary(c) if c is not None else "-" for c in row)
-            )
+        for level_idx, row in enumerate(obs.pyramid):
+            self.print_fn(f"  Level {level_idx}")
+            for col_idx, card in enumerate(row):
+                summary = _card_summary(card) if card is not None else "-"
+                self.print_fn(f"    [{level_idx},{col_idx}] {summary}")
         royals = ", ".join(_royal_summary(r) for r in obs.royals_available)
         self.print_fn(f"Royals available: {royals if royals else 'none'}")
         self.print_fn(
@@ -218,17 +242,19 @@ def main() -> None:
         "--opponent", choices=list(AGENT_REGISTRY.keys()), default="greedy"
     )
     parser.add_argument("--human-seat", type=int, choices=(0, 1), default=0)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
+
+    seed = args.seed if args.seed is not None else random.randrange(2**32)
 
     opponent_factory = AGENT_REGISTRY[args.opponent]
     opponent = opponent_factory()
     human: Agent = HumanAgent()
 
     if args.human_seat == 0:
-        final = play_game(human, opponent, seed=args.seed)
+        final = play_game(human, opponent, seed=seed)
     else:
-        final = play_game(opponent, human, seed=args.seed)
+        final = play_game(opponent, human, seed=seed)
 
     if final.winner is None:
         print("No winner")
