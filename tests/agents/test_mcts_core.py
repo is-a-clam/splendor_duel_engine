@@ -17,6 +17,7 @@ from splendor_duel_engine.agents.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import (
     DoneWithPrivileges,
     DoneWithReplenish,
+    apply,
     decide,
 )
 from splendor_duel_engine.engine.observation import observation
@@ -33,13 +34,6 @@ def _advance_to_mandatory(state):
     state = apply(state, DoneWithReplenish())
     assert state.phase == Phase.MANDATORY
     return state
-
-
-def apply(state, action):
-    """Helper to apply action."""
-    from splendor_duel_engine.engine.actions import apply as engine_apply
-
-    return engine_apply(state, action)
 
 
 def test_mcts_node_creation():
@@ -231,3 +225,96 @@ def test_mcts_node_is_fully_expanded():
 
     node.untried_actions = []
     assert node.is_fully_expanded()
+
+
+def test_playout_from_near_terminal_state():
+    """Playout from a state one move from game end should terminate quickly with correct winner.
+
+    This test verifies that playout actually continues from the given state
+    (not from a fresh game) and correctly identifies the winner.
+    """
+    from dataclasses import replace as dc_replace
+
+    from splendor_duel_engine.engine.cards import load_cards
+    from splendor_duel_engine.engine.state import Phase, PlayerState, Tokens
+
+    # Create a near-terminal state: player 0 has 19 prestige and can buy a 1-point card
+    jewels, _royals = load_cards()
+
+    # Find a cheap 1-point card to use as the winning purchase
+    cheap_card = None
+    for card in jewels:
+        if card.points == 1 and card.level == 1:
+            cheap_card = card
+            break
+    assert cheap_card is not None, "Need a level 1, 1-point card for test"
+
+    # Build a minimal state where player 0 is about to win
+    # Player 0 has 19 prestige, the cheap card is in the pyramid, and they can afford it
+    base_state = new_game(0)
+
+    # Advance to MANDATORY phase
+    state = replace(base_state, phase=Phase.USE_PRIVILEGES)
+    state = apply(state, DoneWithPrivileges())
+    state = apply(state, DoneWithReplenish())
+    assert state.phase == Phase.MANDATORY
+
+    # Place the cheap card in the pyramid at a known position
+    pyramid = [list(row) for row in state.pyramid]
+    # Put the cheap card at pyramid[2][0] (level 1, first slot)
+    pyramid[2][0] = cheap_card
+    new_pyramid = tuple(tuple(row) for row in pyramid)
+
+    # Give player 0 19 prestige and enough tokens to buy the cheap card
+    # Cheap card costs should be affordable - give them the exact tokens needed
+    cost = cheap_card.cost
+    tokens = Tokens(
+        white=cost.white,
+        blue=cost.blue,
+        green=cost.green,
+        red=cost.red,
+        black=cost.black,
+        pearl=cost.pearl,
+        gold=0,
+    )
+    # Bonuses don't matter since we give exact cost
+    player0 = PlayerState(
+        tokens=tokens,
+        bonus=Tokens(),
+        prestige=19,
+        crowns=0,
+        reserved=(),
+        purchased=(),
+        privileges=0,
+    )
+    player1 = PlayerState(
+        tokens=Tokens(),
+        bonus=Tokens(),
+        prestige=0,
+        crowns=0,
+        reserved=(),
+        purchased=(),
+        privileges=0,
+    )
+
+    near_end_state = dc_replace(
+        state,
+        players=(player0, player1),
+        pyramid=new_pyramid,
+        current_player=0,
+        phase=Phase.MANDATORY,
+    )
+
+    # Verify the state is set up correctly
+    dp = decide(near_end_state)
+    buy_actions = [
+        a for a in dp.legal_actions if hasattr(a, "card") and a.card.id == cheap_card.id
+    ]
+    assert buy_actions, f"Cheap card {cheap_card.id} should be buyable"
+
+    # Run playout with greedy policy from this state
+    # Player 0 should win immediately by buying the card
+    result = playout(near_end_state, random.Random(42), playout_policy="greedy")
+
+    # From player 0's perspective (current player), result should be 1.0 (win)
+    assert result == 1.0, f"Expected win (1.0) for current player, got {result}"

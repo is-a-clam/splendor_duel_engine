@@ -6,15 +6,17 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from splendor_duel_engine.agents.base import play_game_from_state
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.engine.actions import Action, apply, decide
 from splendor_duel_engine.engine.state import GameState
 
-# Factory functions for playout policies to ensure fresh RNG per playout
+# Factory functions for playout policies to ensure fresh RNG per playout.
+# Both are callables accepting a seed derived from the MCTS RNG.
 PLAYOUT_POLICIES = {
-    "greedy": GreedyAgent,
-    "random": lambda: RandomAgent(seed=None),
+    "greedy": lambda seed: GreedyAgent(),
+    "random": lambda seed: RandomAgent(seed=seed),
 }
 
 
@@ -69,9 +71,6 @@ def uct_select(node: MCTSNode, exploration: float = 1.414) -> MCTSNode:
         A node that is either terminal or not fully expanded.
     """
     while not node.is_terminal():
-        # If node has no children yet, it needs expansion (untried_actions not initialized)
-        if not node.children and (node.untried_actions is None or node.untried_actions):
-            return node
         if not node.is_fully_expanded():
             return node
         # Prefer unvisited children (visits == 0) for pure exploration
@@ -122,34 +121,30 @@ def playout(
     Returns the result from the perspective of the player whose turn it is
     in the given state: 1.0 for win, 0.5 for draw, 0.0 for loss.
 
-    RNG handling during playout:
-    - state.rng is pre-seeded from determinization (for tree determinism)
-    - engine.apply deep-copies state.rng before any random draw
-    - First replenish: uses the pre-seeded RNG (deterministic per root)
-    - Subsequent random draws (deck draws, later replenishes): use the
-      advanced RNG from previous draws — naturally diverges per branch
-    - play_game passes its own seed for agent decisions; engine.apply's RNG
-      handles game-internal randomness (replenish, deck order if needed)
+    A fresh RNG is derived from the passed ``rng`` for this playout branch,
+    used for both game-internal randomness (replenish draws, etc.) and for
+    seeding the playout agents.
 
     Args:
         state: Starting game state.
-        rng: Random number generator (used for agent seeds).
+        rng: Random number generator (used to derive playout branch RNG and agent seeds).
         playout_policy: "greedy" or "random" (default "greedy").
 
     Returns:
         1.0 if current player wins, 0.5 for draw, 0.0 if current player loses.
     """
-    policy_class = PLAYOUT_POLICIES[playout_policy]
-    if playout_policy == "random":
-        agent0 = policy_class()
-        agent1 = policy_class()
-    else:
-        agent0 = policy_class()
-        agent1 = policy_class()
-    from splendor_duel_engine.agents.base import play_game
-
-    final = play_game(agent0, agent1, seed=rng.randint(0, 2**31 - 1))
     current_player = state.current_player
+
+    # Derive a branch-specific RNG and agent seeds from the MCTS RNG
+    branch_rng = random.Random(rng.randint(0, 2**31 - 1))
+    agent_seed = rng.randint(0, 2**31 - 1)
+
+    policy_factory = PLAYOUT_POLICIES[playout_policy]
+    agent0 = policy_factory(agent_seed)
+    agent1 = policy_factory(agent_seed)
+
+    final = play_game_from_state(state, agent0, agent1, branch_rng)
+
     if final.winner is None:
         return 0.5
     return 1.0 if final.winner == current_player else 0.0
@@ -166,10 +161,11 @@ def backpropagate(node: MCTSNode, result: float):
         result: Playout result from the perspective of the root player
             (1.0 win, 0.5 draw, 0.0 loss).
     """
-    while node is not None:
-        node.visits += 1
-        node.value += result
-        node = node.parent
+    current: MCTSNode | None = node
+    while current is not None:
+        current.visits += 1
+        current.value += result
+        current = current.parent
 
 
 def mcts_search(
@@ -217,11 +213,11 @@ def mcts_search(
             result = playout(node.state, rng, playout_policy)
             backpropagate(node, result)
         else:
-            # Fully expanded non-terminal node with no children (shouldn't happen
-            # in normal operation, but guard against it)
-            current_player = root_state.current_player
-            result = 1.0 if node.state.winner == current_player else 0.0
-            backpropagate(node, result)
+            # This branch should be unreachable: uct_select guarantees we only
+            # reach here for terminal or not-fully-expanded nodes.
+            # If somehow reached (e.g., logic bug), treat as a draw to avoid
+            # corrupting the tree with arbitrary values.
+            backpropagate(node, 0.5)
     # Return most-visited action
     if not root.children:
         # No playouts completed (e.g., max_playouts=0 or all led to terminal immediately)
