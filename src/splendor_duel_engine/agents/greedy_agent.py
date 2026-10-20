@@ -54,6 +54,7 @@ _ROYAL_PRIORITY = {
     Ability.EXTRA_TURN: 3,
     Ability.PRIVILEGE: 2,
     Ability.STEAL_TOKEN: 1,
+    None: 0,
 }
 
 
