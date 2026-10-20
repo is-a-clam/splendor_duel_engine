@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 from dataclasses import dataclass
 
@@ -742,8 +743,13 @@ def _apply_replenish(state: GameState) -> GameState:
         count = state.bag.count(color)
         token_colors.extend([color] * count)
 
-    # Shuffle the tokens using state.rng
-    state.rng.shuffle(token_colors)
+    # Shuffle the tokens with a *copy* of the state's RNG. ``apply`` must never
+    # mutate its input, and ``random.Random`` is shared by reference, so drawing
+    # from ``state.rng`` directly would advance the caller's RNG in place. The
+    # copy is stored into the returned state, so replaying the same action
+    # sequence from the same state still yields the same draws.
+    local_rng = copy.deepcopy(state.rng)
+    local_rng.shuffle(token_colors)
 
     # Collect all empty board indices in SPIRAL order
     empty_indices = [idx for idx in SPIRAL if state.board[idx] is None]
@@ -767,6 +773,7 @@ def _apply_replenish(state: GameState) -> GameState:
         privileges_supply=new_priv_supply,
         current_player=active,
         phase=Phase.MANDATORY,
+        rng=local_rng,
     )
 
 

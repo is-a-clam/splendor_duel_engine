@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import random
 
-from splendor_duel_engine.engine.actions import apply, decide
-from splendor_duel_engine.engine.colors import Color
+from splendor_duel_engine.engine.actions import Action, apply, decide
+from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState, PlayerState, new_game
 
 
-def _count_tokens_on_board(board) -> int:
+def _count_tokens_on_board(board: tuple[Color | None, ...]) -> int:
     return sum(1 for c in board if c is not None)
 
 
-def _count_tokens_in_bag(bag) -> int:
+def _count_tokens_in_bag(bag: Tokens) -> int:
     return bag.total()
 
 
-def _count_tokens_in_hands(players) -> int:
+def _count_tokens_in_hands(players: tuple[PlayerState, PlayerState]) -> int:
     total = 0
     for p in players:
         total += p.tokens.total()
@@ -84,19 +84,40 @@ def assert_invariants(state: GameState) -> None:
         assert state.phase is Phase.GAME_OVER
 
 
-def play_random_game(seed: int, max_steps: int = 10000) -> GameState:
-    """Play a full game with random legal moves, asserting invariants at each step."""
+def play_random_game(
+    seed: int, max_steps: int = 10000
+) -> tuple[GameState, tuple[Action, ...]]:
+    """Play a full game with random legal moves, asserting invariants each step.
+
+    Returns ``(final_state, actions)`` so callers can replay the same action
+    sequence (invariant 5). Raises ``AssertionError`` if the game does not reach
+    a winner within ``max_steps`` plies.
+    """
     rng = random.Random(seed)
-    st = new_game(seed)
+    start = new_game(seed)
+    st = start
+    actions: list[Action] = []
     step = 0
     while st.winner is None and step < max_steps:
         assert_invariants(st)
         dp = decide(st)
-        if len(dp.legal_actions) == 0:
-            break  # should not happen if invariants hold
+        # Invariant 4 guarantees a non-empty action list here; if it is ever
+        # empty, ``rng.choice`` raising on the empty sequence is the failure.
         action = rng.choice(dp.legal_actions)
-        # Replay with clone to ensure apply doesn't consult rng? - check by copying state
+        actions.append(action)
         st = apply(st, action)
         step += 1
+    if st.winner is None:
+        raise AssertionError(
+            f"game did not terminate within max_steps={max_steps} (step={step})"
+        )
     assert_invariants(st)
+    return st, tuple(actions)
+
+
+def replay(start: GameState, actions: tuple[Action, ...]) -> GameState:
+    """Apply ``actions`` to ``start`` in order and return the final state."""
+    st = start
+    for action in actions:
+        st = apply(st, action)
     return st
