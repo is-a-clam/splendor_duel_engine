@@ -94,43 +94,122 @@ def test_sixth_crown_grants_second_royal():
 
 
 def test_max_two_royals_per_player():
-    # Crossing 6th from <6 grants exactly one more royal opportunity
-    # No trigger at 9
+    """The rule: at most 2 royals per player, triggered at the 3rd and 6th crown.
+
+    Spec §Royal cards: a player takes a royal when crossing 3 crowns and again
+    when crossing 6; there is no trigger at 9. This drives a single player
+    through all three crossings and asserts the real representation: the royal
+    is removed from ``royals_available`` and its prestige lands on the player.
+
+    The player's royal count is not stored on ``PlayerState``, so it is inferred
+    from the ``royals_available`` shrink plus the extra prestige granted.
+    """
     base_st = new_game(0)
     jewels, _royals = load_cards()
-    card = None
-    for c in jewels:
-        if c.id == "L2-19":
-            card = c
-            break
-    # Get first royal at 3
+    crown_card = next(c for c in jewels if c.id == "L2-19")  # grants 1 crown
+    assert crown_card.crowns == 1
+
+    # Two distinguishable royals, both ability-free so the post-pick phase is a
+    # plain turn end (no STEAL_TOKEN / extra-turn branch to reason about).
+    royal_a = RoyalCard(id="R-test-a", points=2, ability=None)
+    royal_b = RoyalCard(id="R-test-b", points=3, ability=None)
+    # Left over to prove the 9-crown crossing does *not* consume one.
+    royal_c = RoyalCard(id="R-test-c", points=4, ability=None)
+
+    def buy_crown_card(st: GameState) -> GameState:
+        """From MANDATORY, buy the reserved crown card and pay for it."""
+        dp = decide(st)
+        buy = [
+            a
+            for a in dp.legal_actions
+            if isinstance(a, BuyCard) and a.card.id == crown_card.id
+        ]
+        assert len(buy) == 1
+        st2 = apply(st, buy[0])
+        pay = [a for a in decide(st2).legal_actions if isinstance(a, PayTokens)]
+        assert pay
+        return apply(st2, pay[0])
+
+    def choose_first_royal(st: GameState) -> GameState:
+        choices = decide(st).legal_actions
+        assert choices, "expected at least one royal to choose"
+        return apply(st, choices[0])
+
+    # --- Crossing the 3rd crown grants the first royal ---
     p0 = replace(
         base_st.players[0],
         bonus=Tokens(white=2, blue=2, red=2, black=2, pearl=1),
         tokens=Tokens(white=2, blue=2, red=2, black=2, pearl=1, gold=5),
         crowns=2,
-        reserved=(ReservedCard(card=card, from_deck=False),),
+        reserved=(ReservedCard(card=crown_card, from_deck=False),),
     )
     st = replace(
         base_st,
         current_player=0,
         phase=Phase.MANDATORY,
+        royals_available=(royal_a, royal_b, royal_c),
         players=(p0, base_st.players[1]),
     )
-    dp = decide(st)
-    buy_actions = [
-        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
-    ]
-    st2 = apply(st, buy_actions[0])
-    st3 = apply(st2, decide(st2).legal_actions[0])  # pay
-    # Choose a royal
-    dp_royal = decide(st3)
-    apply(st3, dp_royal.legal_actions[0])
-    # st4 is after royal resolution (maybe extra turn or normal turn end)
-    # Now player 0 has 1 royal taken conceptually? And crowns are 3. To get second royal need to reach 6 from below
-    # But we need to simulate buying another crown card while having 5 crowns
-    # Simpler: set up state directly
-    assert True
+
+    st = buy_crown_card(st)
+    assert st.phase is Phase.CHOOSE_ROYAL
+    assert st.players[0].crowns == 3
+    available_before = len(st.royals_available)
+    prestige_before = st.players[0].prestige
+
+    royal_chosen = next(
+        r for r in st.royals_available if r.id == decide(st).legal_actions[0].royal_id
+    )
+    st = choose_first_royal(st)
+    assert len(st.royals_available) == available_before - 1
+    assert st.players[0].prestige == prestige_before + royal_chosen.points
+
+    # --- Crossing the 6th crown grants the second royal ---
+    p0 = replace(
+        st.players[0],
+        tokens=Tokens(white=2, blue=2, red=2, black=2, pearl=1, gold=5),
+        crowns=5,
+        reserved=(ReservedCard(card=crown_card, from_deck=False),),
+    )
+    st = replace(
+        st,
+        current_player=0,
+        phase=Phase.MANDATORY,
+        players=(p0, st.players[1]),
+    )
+
+    st = buy_crown_card(st)
+    assert st.phase is Phase.CHOOSE_ROYAL
+    assert st.players[0].crowns == 6
+    available_before = len(st.royals_available)
+    prestige_before = st.players[0].prestige
+
+    royal_chosen = next(
+        r for r in st.royals_available if r.id == decide(st).legal_actions[0].royal_id
+    )
+    st = choose_first_royal(st)
+    assert len(st.royals_available) == available_before - 1
+    assert st.players[0].prestige == prestige_before + royal_chosen.points
+
+    # --- Crossing from 8 to 9 crowns must NOT trigger a third royal ---
+    p0 = replace(
+        st.players[0],
+        tokens=Tokens(white=2, blue=2, red=2, black=2, pearl=1, gold=5),
+        crowns=8,
+        reserved=(ReservedCard(card=crown_card, from_deck=False),),
+    )
+    st = replace(
+        st,
+        current_player=0,
+        phase=Phase.MANDATORY,
+        players=(p0, st.players[1]),
+    )
+
+    available_before = len(st.royals_available)
+    st = buy_crown_card(st)
+    assert st.players[0].crowns == 9
+    assert st.phase is not Phase.CHOOSE_ROYAL
+    assert len(st.royals_available) == available_before  # unchanged
 
 
 def test_royal_ability_resolves():

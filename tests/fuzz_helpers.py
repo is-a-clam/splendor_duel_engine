@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from splendor_duel_engine.engine.actions import Action, apply, decide
+from splendor_duel_engine.engine.actions import Action, TakeTokens, apply, decide
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, PlayerState, new_game
@@ -57,6 +57,20 @@ def _all_card_ids(state: GameState) -> list[str]:
     return ids
 
 
+def _action_semantic_key(action: Action) -> object:
+    """Return a key under which semantically equivalent actions compare equal.
+
+    ``TakeTokens`` is the one action whose *representation* can vary for the
+    same rule-level move: the line ``(A, B)`` and its reverse ``(B, A)`` take
+    the same tokens. Key by the token-cell set so a mask that offers both
+    directions is caught (this is the predicate that let the duplicated
+    take-lines ship).
+    """
+    if isinstance(action, TakeTokens):
+        return ("take", frozenset(action.line))
+    return ("raw", action)
+
+
 def assert_invariants(state: GameState) -> None:
     """Assert invariants hold for the given state."""
     # 1. token conservation
@@ -80,6 +94,11 @@ def assert_invariants(state: GameState) -> None:
     if state.winner is None:
         dp = decide(state)
         assert len(dp.legal_actions) > 0, f"deadlock in phase {state.phase}"
+        # 5. the legal-action mask offers each semantic move exactly once
+        keys = [_action_semantic_key(a) for a in dp.legal_actions]
+        assert len(keys) == len(set(keys)), (
+            f"duplicate equivalent legal actions in phase {state.phase}: {dp.legal_actions}"
+        )
     else:
         assert state.phase is Phase.GAME_OVER
 

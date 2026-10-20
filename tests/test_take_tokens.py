@@ -4,10 +4,14 @@ import pytest
 
 from splendor_duel_engine.engine.actions import TakeTokens, apply, decide
 from splendor_duel_engine.engine.colors import Color
+from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, new_game
 
 
 def board_state(**kwargs) -> GameState:
+    # ``new_game`` now opens in USE_PRIVILEGES; these tests exercise the
+    # MANDATORY-phase take-token mask, so state the phase explicitly.
+    kwargs.setdefault("phase", Phase.MANDATORY)
     st = new_game(0)
     return replace(st, **kwargs)
 
@@ -112,3 +116,41 @@ def test_apply_does_not_mutate_input():
     before = st
     apply(st, TakeTokens((0,)))
     assert st == before
+
+
+def _take_lines(st):
+    return [a.line for a in decide(st).legal_actions if isinstance(a, TakeTokens)]
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_take_token_mask_has_no_reverse_duplicates(seed):
+    """Each distinct line is offered exactly once, regardless of traversal order.
+
+    The line scanner walks every start cell in all 8 directions, so without
+    canonicalisation the same physical line appears as both ``(A, B)`` and
+    ``(B, A)``. Distinctness is per token-cell set, not per index tuple.
+    """
+    st = replace(new_game(seed), phase=Phase.MANDATORY)
+    lines = _take_lines(st)
+    assert lines  # the full 25-token board always offers something
+    cell_sets = [frozenset(line) for line in lines]
+    assert len(cell_sets) == len(set(cell_sets))
+    for line in lines:
+        assert line == min(line, line[::-1])
+
+
+def test_take_token_mask_dedupes_horizontal_and_vertical_lines():
+    """A hand-built board with both a horizontal and a vertical line is deduped."""
+    board = [None] * 25
+    board[0] = Color.RED  # (0,0)
+    board[1] = Color.RED  # (0,1) -> horizontal (0, 1)
+    board[5] = Color.RED  # (1,0) -> vertical (0, 5)
+    st = board_state(board=tuple(board))
+    lines = _take_lines(st)
+    # Each straight is present once, in canonical orientation.
+    assert lines.count((0, 1)) == 1
+    assert (1, 0) not in lines
+    assert lines.count((0, 5)) == 1
+    assert (5, 0) not in lines
+    cell_sets = [frozenset(line) for line in lines]
+    assert len(cell_sets) == len(set(cell_sets))

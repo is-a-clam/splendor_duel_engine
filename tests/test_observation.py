@@ -1,6 +1,9 @@
 """Tests for observation API with hidden information (Task 9)."""
 
+import dataclasses
 from dataclasses import replace
+
+import pytest
 
 from splendor_duel_engine.engine.observation import observation
 from splendor_duel_engine.engine.state import ReservedCard, new_game
@@ -77,8 +80,5 @@ def test_public_info_matches_state():
 def test_observation_is_immutable():
     st = new_game(0)
     obs = observation(st, 0)
-    try:
-        object.__setattr__(obs, "current_player", 5)
-        assert False, "should be immutable"
-    except Exception:  # noqa: BLE001, S110
-        pass
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        obs.current_player = 5  # type: ignore[misc]  # frozen dataclass: rejected

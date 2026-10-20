@@ -168,7 +168,10 @@ def new_game(seed: int) -> GameState:
         privileges_supply=_TOTAL_PRIVILEGES - 1,  # second player took one
         current_player=current_player,
         winner=None,
-        phase=Phase.MANDATORY,
+        # First player opens in USE_PRIVILEGES (plan pre-flight ruling,
+        # conflict-1). They hold 0 privileges and the bag is empty, so both
+        # opening steps are no-ops, but the phase matches the plan interface.
+        phase=Phase.USE_PRIVILEGES,
         pending_buy=None,
         pending_reserve=None,
         rng=rng,

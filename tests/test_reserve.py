@@ -227,25 +227,30 @@ def test_multicolor_may_be_reserved_without_owning_bonus():
         phase=Phase.MANDATORY,
         board=tuple(board),
     )
+    # board_state re-seeds, so locate the same card by id in the fresh state.
+    assert st.pyramid[2][2].id == card.id
     dp = decide(st)
     reserve_actions = [a for a in dp.legal_actions if isinstance(a, ReserveCard)]
-    # Should be able to reserve the multicolor card (from pyramid or deck)
-    # Find a pyramid reserve action that would take L1-24
-    pyramid_actions = [a for a in reserve_actions if a.source == "pyramid"]
-    assert len(pyramid_actions) > 0
+    # Find the pyramid reserve action that targets this exact multicolor card
+    # (pyramid index = row*10 + col; L1-24 sits at row 2, col 2 -> 22).
+    multi_actions = [
+        a
+        for a in reserve_actions
+        if a.source == "pyramid"
+        and st.pyramid[a.index // 10][a.index % 10].id == card.id
+    ]
+    assert len(multi_actions) == 1
     # The action application should not fail due to multicolor restriction at reserve time
-    st2 = apply(st, pyramid_actions[0])
+    st2 = apply(st, multi_actions[0])
     assert st2.phase is Phase.CHOOSE_GOLD
     # Complete the reserve
     dp2 = decide(st2)
     choose_gold_actions = [a for a in dp2.legal_actions if isinstance(a, ChooseGold)]
     st3 = apply(st2, choose_gold_actions[0])
     assert len(st3.players[0].reserved) == 1
-    # Reserved card should be the multicolor one (or some card; the key is no error)
-    assert (
-        st3.players[0].reserved[0].card.is_multicolor
-        or len(st3.players[0].reserved) == 1
-    )
+    # The reserved card must be exactly the multicolor card that was reserved.
+    assert st3.players[0].reserved[0].card.id == card.id
+    assert st3.players[0].reserved[0].card.is_multicolor
 
 
 if __name__ == "__main__":

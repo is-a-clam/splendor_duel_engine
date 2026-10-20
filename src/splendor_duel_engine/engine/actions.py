@@ -465,6 +465,14 @@ def _is_straight_line(line: tuple[int, ...]) -> bool:
 
 
 def _legal_take_token_lines(board: tuple[Color | None, ...]) -> list[tuple[int, ...]]:
+    """Enumerate each distinct straight line of 1-3 non-gold tokens once.
+
+    A line is scanned from every start cell in all 8 directions, so the same
+    physical line is produced twice — once per traversal direction (``(A, B)``
+    from A and ``(B, A)`` from B). Canonicalise each candidate to the
+    lexicographic minimum of the line and its reverse so the legal-action mask
+    offers exactly one action per distinct line (length-1 lines are unaffected).
+    """
     result: set[tuple[int, ...]] = set()
     for start in range(_BOARD_SIZE):
         if board[start] is None or board[start] == Color.GOLD:
@@ -479,7 +487,7 @@ def _legal_take_token_lines(board: tuple[Color | None, ...]) -> list[tuple[int, 
                 and board[idx2] is not None
                 and board[idx2] != Color.GOLD
             ):
-                result.add((start, idx2))
+                result.add(min((start, idx2), (idx2, start)))
                 r3, c3 = r + dr * 2, c + dc * 2
                 idx3 = _rc_to_index(r3, c3)
                 if (
@@ -487,7 +495,8 @@ def _legal_take_token_lines(board: tuple[Color | None, ...]) -> list[tuple[int, 
                     and board[idx3] is not None
                     and board[idx3] != Color.GOLD
                 ):
-                    result.add((start, idx2, idx3))
+                    line = (start, idx2, idx3)
+                    result.add(min(line, line[::-1]))
     return sorted(result, key=lambda x: (len(x), x))
 
 
