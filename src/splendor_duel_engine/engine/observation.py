@@ -88,7 +88,7 @@ def observation(state: GameState, player: int) -> Observation:
         pyramid=state.pyramid,
         royals_available=state.royals_available,
         privileges_supply=state.privileges_supply,
-        deck_counts=tuple(len(d) for d in state.decks),
+        deck_counts=(len(state.decks[0]), len(state.decks[1]), len(state.decks[2])),
         bag=state.bag,
         current_player=state.current_player,
         winner=state.winner,
