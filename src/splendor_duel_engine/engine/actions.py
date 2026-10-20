@@ -1037,24 +1037,10 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     # check lives in _finish_turn (via winner_of). Checking here would let a
     # purchase end the game before its ability/royal/discard steps ran.
 
-    # Check if we crossed crown thresholds for royals
-    # Royals granted at 3rd and 6th crown (crossing thresholds). Max 2 per player.
-    # Count how many royals player has? Player doesn't store royals separately,
-    # but we can track by counting royals in purchased? No - royals are separate.
-    # Or count by: player has gotten royals when they crossed thresholds.
-    # But easier to track: number of royals obtained = floor(new_crowns/3) if >=3 and we only do up to 6?
-    # Or more precisely: check if (old_crowns < 3 <= new_crowns) or (old_crowns < 6 <= new_crowns)
-    # But need to ensure we don't give more than 2 total - and also only if crossing from below
-    # Also "max 2 per player" - so trigger at 3rd and at 6th
-    crossed_royal = False
-    if old_crowns < 3 <= new_crowns or old_crowns < 6 <= new_crowns:
-        crossed_royal = True
-    # Note: could cross both in one purchase? Unusual but possible if gain multiple crowns at once
-    # The spec says "upon acquiring your 3rd crown..." and "upon your 6th crown..." - if gained both at once?
-    # Probably trigger royals for each threshold crossed; but you can only take 1 royal per trigger event.
-    # But easier to handle - if both crossed, we need to give royals for both? Max 2 total, triggers at 3 and 6, so at most 2.
-    # For simplicity, if both crossed in same purchase, give first royal now? Or need to handle queue.
-    # But let us look up how it's done. Maybe trigger in order.
+    # Royal trigger: crossing the 3rd or 6th crown threshold (from below) grants
+    # one royal pick each; no trigger at 9. A multicolor card cannot pick its
+    # royal yet — the colour choice comes first — so defer via pending_royal.
+    crossed_royal = old_crowns < 3 <= new_crowns or old_crowns < 6 <= new_crowns
 
     if crossed_royal and state.royals_available:
         royal_phase_state = dataclasses.replace(
@@ -1067,7 +1053,11 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             pending_ability=None,
         )
         if card.is_multicolor:
-            return dataclasses.replace(royal_phase_state, phase=Phase.MULTICOLOR_COLOR)
+            return dataclasses.replace(
+                royal_phase_state,
+                phase=Phase.MULTICOLOR_COLOR,
+                pending_royal=True,
+            )
         return royal_phase_state
 
     # Handle multicolor first (separate from abilities)
@@ -1186,6 +1176,13 @@ def _end_of_turn(
         pending_reserve=None,
         pending_ability=None,
     )
+    # Deferred royal pick (multicolor purchase that crossed a crown threshold):
+    # abilities have resolved by now, so run the royal step before discard. The
+    # flag is one-shot; clear it whether or not royals remain available.
+    if state.pending_royal:
+        state = dataclasses.replace(state, pending_royal=False)
+        if state.royals_available:
+            return dataclasses.replace(state, phase=Phase.CHOOSE_ROYAL)
     if state.players[active].tokens.total() > _TOKEN_LIMIT:
         # Defer the win check until after the player discards. ``extra_turn``
         # carries the pending-seat decision across the DISCARD decision point.
@@ -1374,7 +1371,11 @@ def _apply_choose_matching_token(state: GameState, index: int) -> GameState:
 
 
 def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
-    """Resolve choosing a royal card."""
+    """Grant the chosen royal, then resolve its ability and end the turn.
+
+    Called at the royal step of the end-of-turn sequence (after the purchased
+    card's ability, before discard). The royal adds prestige only.
+    """
     active = state.current_player
     # Find the royal
     royal = None

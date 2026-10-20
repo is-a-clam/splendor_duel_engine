@@ -111,6 +111,10 @@ class GameState:
     #: Stores the ability being resolved during a decision point phase
     #: (STEAL_TOKEN). None otherwise.
     pending_ability: Ability | None = None
+    #: True when a purchase crossed a crown threshold but the royal pick was
+    #: deferred because the card was multicolor (its color must be chosen
+    #: first). Cleared when the royal step runs in ``_end_of_turn``.
+    pending_royal: bool = False
 
 
 def new_game(seed: int) -> GameState:

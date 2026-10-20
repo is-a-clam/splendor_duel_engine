@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from splendor_duel_engine.engine.actions import (
     BuyCard,
+    ChooseMulticolor,
     PayTokens,
     apply,
     decide,
@@ -204,3 +205,69 @@ def test_no_royal_available_skips_choice():
     st3 = apply(st2, pay_actions[0])
     # No royals available, should skip to ability resolution or turn end
     assert st3.phase != Phase.CHOOSE_ROYAL
+
+
+def test_multicolor_purchase_crossing_crown_threshold_grants_royal():
+    """Buying a multicolor card that crosses a crown threshold still offers a royal.
+
+    The colour choice comes first (MULTICOLOR_COLOR), but the royal pick must not
+    be dropped: after the colour resolves the engine enters CHOOSE_ROYAL, and
+    choosing a royal grants its prestige.
+    """
+    base_st = new_game(0)
+    jewels, _royals = load_cards()
+    card = None
+    for c in jewels:
+        if c.id == "L2-00":  # multicolor, gives 2 crowns
+            card = c
+            break
+    assert card is not None and card.is_multicolor and card.crowns > 0
+
+    # Player has 2 crowns, so this purchase reaches 4 (crosses the 3rd-crown
+    # threshold). A colored bonus is required to buy a multicolor card.
+    p0 = replace(
+        base_st.players[0],
+        bonus=Tokens(white=1),
+        tokens=Tokens(green=6, pearl=1, gold=5),
+        crowns=2,
+        prestige=10,
+        reserved=(ReservedCard(card=card, from_deck=False),),
+    )
+    st = replace(
+        base_st,
+        current_player=0,
+        phase=Phase.MANDATORY,
+        players=(p0, base_st.players[1]),
+    )
+
+    dp = decide(st)
+    buy_actions = [
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == card.id
+    ]
+    assert len(buy_actions) == 1
+    st2 = apply(st, buy_actions[0])
+    assert st2.phase is Phase.CHOOSE_PAYMENT
+
+    pay_actions = [a for a in decide(st2).legal_actions if isinstance(a, PayTokens)]
+    st3 = apply(st2, pay_actions[0])
+
+    # The colour must be chosen before the royal, and the trigger is retained.
+    assert st3.phase is Phase.MULTICOLOR_COLOR
+    assert st3.pending_royal is True
+    assert st3.players[0].crowns == 2 + card.crowns
+
+    color_actions = [
+        a for a in decide(st3).legal_actions if isinstance(a, ChooseMulticolor)
+    ]
+    assert color_actions
+    st4 = apply(st3, color_actions[0])
+
+    assert st4.phase is Phase.CHOOSE_ROYAL
+    assert st4.pending_royal is False
+    assert len(decide(st4).legal_actions) == len(st4.royals_available)
+
+    royal_actions = decide(st4).legal_actions
+    royal = next(r for r in st4.royals_available if r.id == royal_actions[0].royal_id)
+    prestige_before = st4.players[0].prestige
+    st5 = apply(st4, royal_actions[0])
+    assert st5.players[0].prestige == prestige_before + royal.points
