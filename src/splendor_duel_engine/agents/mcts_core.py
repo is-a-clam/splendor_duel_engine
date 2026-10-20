@@ -121,13 +121,12 @@ def playout(
     Returns the result from the perspective of the player whose turn it is
     in the given state: 1.0 for win, 0.5 for draw, 0.0 for loss.
 
-    A fresh RNG is derived from the passed ``rng`` for this playout branch,
-    used for both game-internal randomness (replenish draws, etc.) and for
-    seeding the playout agents.
+    The state's RNG (from determinization) is used for game-internal randomness.
+    Agent seeds are derived from the passed ``rng``.
 
     Args:
-        state: Starting game state.
-        rng: Random number generator (used to derive playout branch RNG and agent seeds).
+        state: Starting game state (must be determinized).
+        rng: Random number generator (used to derive agent seeds).
         playout_policy: "greedy" or "random" (default "greedy").
 
     Returns:
@@ -135,8 +134,7 @@ def playout(
     """
     current_player = state.current_player
 
-    # Derive a branch-specific RNG and agent seeds from the MCTS RNG
-    branch_rng = random.Random(rng.randint(0, 2**31 - 1))
+    # Derive agent seeds from the MCTS RNG
     agent_seed = rng.randint(0, 2**31 - 1)
 
     policy_factory = PLAYOUT_POLICIES[playout_policy]
@@ -145,7 +143,7 @@ def playout(
 
     try:
         # Use a higher turn limit for playouts to avoid premature termination
-        final = play_game_from_state(state, agent0, agent1, branch_rng, max_turns=1000)
+        final = play_game_from_state(state, agent0, agent1, max_turns=1000)
     except RuntimeError:
         # Playout exceeded turn limit — treat as draw
         return 0.5
