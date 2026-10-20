@@ -20,3 +20,20 @@ def test_play_game_runs_to_completion():
     final = play_game(FirstLegalAgent(), FirstLegalAgent(), seed=0)
     assert final.winner in (0, 1)
     assert final.phase.name == "GAME_OVER"
+
+
+def test_play_game_raises_when_turn_cap_exceeded():
+    import pytest
+
+    from splendor_duel_engine.agents.random_agent import RandomAgent
+
+    # Any real game needs more than one main action, so a cap of 1 always trips.
+    with pytest.raises(RuntimeError, match="turn"):
+        play_game(RandomAgent(seed=1), RandomAgent(seed=2), seed=0, max_turns=1)
+
+
+def test_play_game_max_turns_none_disables_cap():
+    from splendor_duel_engine.agents.random_agent import RandomAgent
+
+    final = play_game(RandomAgent(seed=1), RandomAgent(seed=2), seed=0, max_turns=None)
+    assert final.winner in (0, 1)
