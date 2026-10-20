@@ -138,7 +138,7 @@ class HumanAgent:
             + f" privileges={obs.you.privileges}"
             + f" reserved={len(obs.you.reserved_public) + obs.you.reserved_deck_count}"
         )
-                # Reserved cards for current player
+        # Reserved cards for current player
         self.print_fn("Your reserved cards:")
         if obs.you.reserved_public or getattr(obs, "your_reserved_deck", None):
             for i, card in enumerate(obs.you.reserved_public):
@@ -177,7 +177,11 @@ class HumanAgent:
             for c in range(5):
                 idx = r * 5 + c
                 color = obs.board[idx]
-                label = color.value[0].upper() + color.value[1].lower() if color is not None else ".."
+                label = (
+                    color.value[0].upper() + color.value[1].lower()
+                    if color is not None
+                    else ".."
+                )
                 cells.append(f"{idx:>2}:{label}")
             self.print_fn("  " + " ".join(cells))
         self.print_fn("Pyramid:")
