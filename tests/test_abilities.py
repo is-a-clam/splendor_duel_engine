@@ -188,7 +188,9 @@ class TestTakeMatchingToken:
 
         # Legal actions should be ChooseMatchingToken for each black token
         dp = decide(st)
-        choose_actions = [a for a in dp.legal_actions if isinstance(a, ChooseMatchingToken)]
+        choose_actions = [
+            a for a in dp.legal_actions if isinstance(a, ChooseMatchingToken)
+        ]
         assert len(choose_actions) == 2
         choose_indices = {a.index for a in choose_actions}
         assert choose_indices == {0, 5}
@@ -571,9 +573,7 @@ class TestAbilityResolutionOrder:
         jewels, _ = load_cards()
         # Find a multicolor card (e.g., L1-24) - these don't have STEAL_TOKEN
         multicolor_card = next(
-            c
-            for c in jewels
-            if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
+            c for c in jewels if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
         )
         reserved = ReservedCard(card=multicolor_card, from_deck=False)
         st = replace(
@@ -587,7 +587,9 @@ class TestAbilityResolutionOrder:
                     tokens=Tokens(gold=20),
                     reserved=(reserved,),
                 ),
-                replace(base_st.players[1], tokens=Tokens(white=1)),  # Opponent has stealable token
+                replace(
+                    base_st.players[1], tokens=Tokens(white=1)
+                ),  # Opponent has stealable token
             ),
         )
 
@@ -600,7 +602,9 @@ class TestAbilityResolutionOrder:
 
         # Choose a color
         dp = decide(st)
-        choose_color = next(a for a in dp.legal_actions if isinstance(a, ChooseMulticolor))
+        choose_color = next(
+            a for a in dp.legal_actions if isinstance(a, ChooseMulticolor)
+        )
         st = apply(st, choose_color)
 
         # After multicolor resolution, should continue to next abilities
@@ -615,9 +619,7 @@ class TestAbilityResolutionOrder:
         jewels, _ = load_cards()
         # Find a multicolor card WITHOUT STEAL_TOKEN
         multicolor_no_steal = next(
-            c
-            for c in jewels
-            if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
+            c for c in jewels if c.is_multicolor and c.ability != Ability.STEAL_TOKEN
         )
         reserved = ReservedCard(card=multicolor_no_steal, from_deck=False)
         st = replace(
@@ -631,7 +633,9 @@ class TestAbilityResolutionOrder:
                     tokens=Tokens(gold=20),
                     reserved=(reserved,),
                 ),
-                replace(base_st.players[1], tokens=Tokens(white=1)),  # Opponent has stealable token
+                replace(
+                    base_st.players[1], tokens=Tokens(white=1)
+                ),  # Opponent has stealable token
             ),
         )
 
@@ -639,7 +643,12 @@ class TestAbilityResolutionOrder:
         st = _complete_buy(st, multicolor_no_steal)
 
         # Choose multicolor
-        st = apply(st, next(a for a in decide(st).legal_actions if isinstance(a, ChooseMulticolor)))
+        st = apply(
+            st,
+            next(
+                a for a in decide(st).legal_actions if isinstance(a, ChooseMulticolor)
+            ),
+        )
 
         # Should NOT enter STEAL_TOKEN phase (card lacks the ability)
         assert st.phase is Phase.USE_PRIVILEGES

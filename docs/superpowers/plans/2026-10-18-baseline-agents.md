@@ -4,7 +4,7 @@
 
 **Goal:** Create two baseline agents — a random agent and a greedy heuristic agent — that use the engine's Observation API to make decisions through the step API (`decide`/`apply`).
 
-**Architecture:** An `agents` module with a common `Agent` protocol/interface. Agents receive an `Observation` (not the full `GameState`) and return a legal `Action`. The random agent samples uniformly; the greedy agent applies deterministic rules per decision point.
+**Architecture:** An `agents` module with a common `Agent` protocol/interface. Agents receive an `Observation` (not the full `GameState`) and return a legal `Action`. The random agent samples uniformly; the greedy agent applies deterministic rules per decision point. Two companion modules consume the agents: `eval` (arena for head-to-head batch matches) and `play` (a terminal human-vs-agent game, where a `HumanAgent` implements the same `Agent` protocol and blocks on stdin).
 
 **Tech Stack:** Python 3.11+, stdlib only, depends on engine (`decide`, `apply`, `observation`, `Action` types, `Phase`, `Color`, `Tokens`, `Card`).
 
@@ -680,7 +680,7 @@ git add -A && git commit -m "feat(agents): greedy heuristic agent with determini
 **Files:**
 - Modify: `src/splendor_duel_engine/agents/__init__.py` (export agents)
 - Create: `src/splendor_duel_engine/eval/arena.py` (or extend if exists)
-- Test: `tests/agents/test_arena.py`
+- Test: `tests/eval/test_arena.py`
 
 **Interfaces:**
 - Consumes: Tasks 1–3 (`play_game`, `RandomAgent`, `GreedyAgent`).
@@ -690,7 +690,7 @@ git add -A && git commit -m "feat(agents): greedy heuristic agent with determini
 
 - [ ] **Step 1: Write failing tests**
 
-`tests/agents/test_arena.py`:
+`tests/eval/test_arena.py`:
 ```python
 from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
@@ -720,7 +720,7 @@ def test_arena_cli_runs():
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `uv run pytest tests/agents/test_arena.py -v` — expected: FAIL (module missing).
+Run: `uv run pytest tests/eval/test_arena.py -v` — expected: FAIL (module missing).
 
 - [ ] **Step 3: Implement `arena.py` and CLI**
 
@@ -809,7 +809,7 @@ __all__ = ["Agent", "play_game", "RandomAgent", "GreedyAgent"]
 
 - [ ] **Step 4: Run tests, lint**
 
-Run: `uv run pytest tests/agents/test_arena.py -v && uv run ruff check .` — expected: PASS.
+Run: `uv run pytest tests/eval/test_arena.py -v && uv run ruff check .` — expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -819,13 +819,123 @@ git add -A && git commit -m "feat(agents): evaluation arena CLI and head-to-head
 
 ---
 
-### Task 5: Integration test — full game simulations and win condition verification
+### Task 5: Human play module — terminal human-vs-agent game
+
+**Files:**
+- Create: `src/splendor_duel_engine/play/__init__.py`
+- Create: `src/splendor_duel_engine/play/human.py`
+- Test: `tests/play/test_human.py`
+- Modify: `AGENTS.md` (layout block: add `play/`)
+
+**Interfaces:**
+- Consumes: Tasks 1–4 (`Agent` protocol, `play_game`, `Observation`, `Phase`, arena's `AGENT_REGISTRY`).
+- Produces:
+  - `human.py`:
+    - `class HumanAgent:` — implements the `Agent` protocol; blocks on IO instead of computing.
+      - `__init__(self, input_fn=input, print_fn=print)` — injectable IO for tests.
+      - `choose_action(self, observation: Observation, legal_actions: tuple[Action, ...]) -> Action` — renders state, prints a numbered menu of `legal_actions` with human-readable descriptions, reads a choice, re-prompts on invalid input (never crashes), returns `legal_actions[n]`.
+      - Rendering rules: full board view on the first decision of a turn; short prompt (no board dump) on sub-decisions like `CHOOSE_PAYMENT`, `MULTICOLOR_COLOR`, `STEAL_TOKEN`, `CHOOSE_ROYAL`, `DISCARD`. Render only from `Observation` — never hidden info (deck order, opponent's face-down reserved cards).
+    - `def main() -> None` — CLI: `python -m splendor_duel_engine.play.human --opponent greedy --human-seat 0`. Builds `HumanAgent` + opponent from the arena's `AGENT_REGISTRY`, calls `play_game`, prints the winner from the final `GameState` (agents get no in-band game-end signal).
+  - **Note:** `HumanAgent` is NOT added to `AGENT_REGISTRY` (arena runs headless batches; a human entry would hang them). It lives only in `play/`; `agents/` and `eval/` stay IO-free. `play_game` stays in `agents.base`.
+
+- [ ] **Step 1: Write failing tests**
+
+`tests/play/test_human.py`:
+```python
+from splendor_duel_engine.play.human import HumanAgent
+from splendor_duel_engine.agents.base import play_game
+from splendor_duel_engine.agents.random_agent import RandomAgent
+
+
+def _scripted_input(answers: list[str]):
+    it = iter(answers)
+    return lambda _prompt="": next(it)
+
+
+def test_human_agent_full_game_with_scripted_input():
+    # Scripted human always answers "1"; game must run to completion
+    # (enough answers: worst case many turns; pad generously)
+    answers = ["1"] * 2000
+    human = HumanAgent(input_fn=_scripted_input(answers), print_fn=lambda *a, **k: None)
+    final = play_game(human, RandomAgent(seed=7), seed=3)
+    assert final.winner in (0, 1)
+
+
+def test_human_agent_reprompts_on_invalid_input():
+    outputs = []
+    # "abc" invalid, "99" out of range, then "0" valid
+    human = HumanAgent(
+        input_fn=_scripted_input(["abc", "99", "0"]),
+        print_fn=lambda *a, **k: outputs.append(" ".join(str(x) for x in a)),
+    )
+    from splendor_duel_engine.engine.actions import decide
+    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.state import new_game
+
+    state = new_game(0)
+    obs = observation(state, state.current_player)
+    dp = decide(state)
+    action = human.choose_action(obs, dp.legal_actions)
+    assert action == dp.legal_actions[0]
+    assert any("invalid" in o.lower() for o in outputs)  # re-prompt happened
+
+
+def test_human_agent_renders_observation_not_hidden_info():
+    rendered = []
+    human = HumanAgent(input_fn=_scripted_input(["1"]), print_fn=lambda *a, **k: rendered.append(" ".join(str(x) for x in a)))
+    from splendor_duel_engine.engine.actions import decide
+    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.state import new_game
+
+    state = new_game(0)
+    obs = observation(state, state.current_player)
+    dp = decide(state)
+    human.choose_action(obs, dp.legal_actions)
+    text = "\n".join(rendered)
+    # Sanity: board and hand shown; nothing rendered that isn't in the Observation
+    assert len(text) > 0
+    # Hidden-info discipline: no deck contents leak (only counts)
+    # (Adjust assertion to match actual Observation fields once engine Task 9 lands)
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `uv run pytest tests/play/test_human.py -v` — expected: FAIL (module missing).
+
+- [ ] **Step 3: Implement `play/human.py`**
+
+Key implementation notes:
+- `choose_action` infers decision type from `legal_actions` types (same dispatch style as `GreedyAgent`); render full view for `USE_PRIVILEGES`/`REPLENISH`/`MANDATORY`, short prompt for sub-decisions.
+- Action descriptions: small `describe(action, obs) -> str` helper; keep it boring and explicit (card points/cost for `BuyCard`, token counts for `TakeTokens`, etc.).
+- Invalid input handling: wrap `input_fn` result in `int()` with try/except, range-check against menu length, print "invalid choice" and loop.
+- `main()` builds agents via `AGENT_REGISTRY` (import from `splendor_duel_engine.eval.arena`) and `HumanAgent()`; human seat picks order in `play_game(human, opponent, seed=0)` or `play_game(opponent, human, seed=0)`.
+
+- [ ] **Step 4: Run tests, lint**
+
+Run: `uv run pytest tests/play/test_human.py -v && uv run ruff check .` — expected: PASS.
+
+- [ ] **Step 5: Update AGENTS.md layout**
+
+Add to the layout block:
+```
+  play/       Terminal human-vs-agent play (HumanAgent, CLI)
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A && git commit -m "feat(play): human terminal player via Agent protocol"
+```
+
+---
+
+### Task 6: Integration test — full game simulations and win condition verification
 
 **Files:**
 - Test: `tests/agents/test_integration.py`
 
 **Interfaces:**
-- Consumes: Tasks 1–4.
+- Consumes: Tasks 1–5.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -894,11 +1004,12 @@ git add -A && git commit -m "test(agents): integration tests for full game simul
 - [ ] Spec coverage: All decision points (USE_PRIVILEGES, REPLENISH, MANDATORY, CHOOSE_PAYMENT, MULTICOLOR_COLOR, STEAL_TOKEN, CHOOSE_ROYAL, DISCARD) handled by greedy agent.
 - [ ] Step scan: Each step has exactly one test and one implementation action.
 - [ ] Type consistency: `Agent` protocol used consistently; `Observation` imported from engine.
-- [ ] Review Focus: All five items have tests in Tasks 2–5.
+- [ ] Review Focus: All five items have tests in Tasks 2–6.
+- [ ] Module discipline: `agents/` and `eval/` are IO-free; all terminal IO lives in `play/`; `HumanAgent` renders only from `Observation` (no hidden info) and satisfies the `Agent` protocol.
 - [ ] Proportion: Plan is concise; code blocks only for non-obvious algorithms.
 
 ## Execution Handoff
 
 **Plan complete and saved to `docs/superpowers/plans/2026-10-18-baseline-agents.md`. Please review the plan. Does it capture what you want?**
 
-**Recommended execution approach:** **Native** (implement in this session). The tasks are sequential but each produces independently testable code. The greedy agent logic is the only complex part; the rest are straightforward scaffolds. A single session can implement and verify all tasks.
+**Recommended execution approach:** **Native** (implement in this session). The tasks are sequential but each produces independently testable code. The greedy agent logic (Task 3) and the human IO loop (Task 5) are the only complex parts; the rest are straightforward scaffolds. A single session can implement and verify all tasks.
