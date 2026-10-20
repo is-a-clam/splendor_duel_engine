@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from splendor_duel_engine.engine.cards import Card, RoyalCard
 from splendor_duel_engine.engine.colors import Color, Tokens
+from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, PurchasedCard
 
 
@@ -43,6 +44,7 @@ class Observation:
     current_player: int
     winner: int | None
     your_reserved_deck: tuple[Card, ...]  # own hidden deck reservations
+    phase: Phase
 
 
 def observation(state: GameState, player: int) -> Observation:
@@ -93,4 +95,5 @@ def observation(state: GameState, player: int) -> Observation:
         current_player=state.current_player,
         winner=state.winner,
         your_reserved_deck=your_reserved_deck,
+        phase=state.phase,
     )
