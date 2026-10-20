@@ -37,7 +37,7 @@ pyproject.toml
 uv sync                      # install (dev group: pytest, ruff)
 uv run pytest                # run tests
 uv run ruff check . && uv run ruff format .  # lint and format
-python -m splendor_duel.eval.arena A B -n 200   # play agent A vs agent B, both seats
+python -m splendor_duel_engine.eval.arena A B -n 200   # play agent A vs agent B, both seats
 ```
 
 ## Rules for the engine

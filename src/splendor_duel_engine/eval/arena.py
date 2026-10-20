@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from typing import Any
 
 from splendor_duel_engine.agents.base import Agent, play_game
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
 
-AGENT_REGISTRY: dict[str, Any] = {
+AGENT_REGISTRY: dict[str, Callable[[], Agent]] = {
     "random": lambda: RandomAgent(seed=None),
     "greedy": GreedyAgent,
 }
@@ -24,6 +25,10 @@ def play_match(
     ``agent_b`` first in odd-indexed games. Game seeds are ``seed_base + i``.
     Returns a plain dict with win counts, win rates and an average game
     length proxy.
+
+    Reproducibility requires fresh agent instances per call: the caller's
+    agent instances are reused across all games, so stateful agents (for
+    example ``RandomAgent``'s RNG) carry over between games and calls.
     """
     a_wins = 0
     b_wins = 0
@@ -35,7 +40,6 @@ def play_match(
             "agent_a_winrate": 0.0,
             "agent_b_winrate": 0.0,
             "avg_turns": 0.0,
-            "avg_game_length": 0.0,
         }
     for i in range(n_games):
         if i % 2 == 0:
@@ -58,7 +62,6 @@ def play_match(
         "agent_a_winrate": a_wins / n_games,
         "agent_b_winrate": b_wins / n_games,
         "avg_turns": total_turns / n_games,
-        "avg_game_length": total_turns / n_games,
     }
 
 

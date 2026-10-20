@@ -32,7 +32,7 @@ def _fmt_tokens(tokens: Tokens) -> str:
     for name in ("white", "blue", "green", "red", "black", "pearl", "gold"):
         count = getattr(tokens, name)
         if count:
-            parts.append(f"{name[:1].upper()}{count}" if False else f"{name}={count}")
+            parts.append(f"{name}={count}")
     return " ".join(parts) if parts else "none"
 
 
@@ -222,7 +222,7 @@ def main() -> None:
     args = parser.parse_args()
 
     opponent_factory = AGENT_REGISTRY[args.opponent]
-    opponent = opponent_factory() if callable(opponent_factory) else opponent_factory
+    opponent = opponent_factory()
     human: Agent = HumanAgent()
 
     if args.human_seat == 0:
