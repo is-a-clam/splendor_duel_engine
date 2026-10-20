@@ -198,6 +198,80 @@ class DecisionPoint:
     legal_actions: tuple[Action, ...]
 
 
+#: The maximum number of tokens a player may hold at the end of their turn
+#: (spec §End of turn and victory). Excess goes to the bag.
+_TOKEN_LIMIT = 10
+
+
+def _color_points(player: PlayerState, color: Color) -> int:
+    """Prestige on ``player``'s purchased cards of effective colour ``color``.
+
+    Spec §End of turn and victory: a multicolor card counts as its chosen
+    colour; every other card counts as its bonus colour. Colorless no-bonus
+    cards and royal cards contribute to no colour.
+    """
+    points = 0
+    for purchased in player.purchased:
+        if purchased.card.is_multicolor:
+            if purchased.chosen_color == color:
+                points += purchased.card.points
+        elif purchased.card.bonus == color:
+            points += purchased.card.points
+    return points
+
+
+def winner_of(state: GameState) -> int | None:
+    """Return the winner index if the active player has just won, else ``None``.
+
+    Spec §End of turn and victory: checked only at the end of the active
+    player's turn. Any one of:
+      1. ``prestige >= 20``,
+      2. ``crowns >= 10``, or
+      3. ``>= 10`` prestige among purchased cards of a single gem colour.
+
+    Uses ``state.players[state.current_player]`` — the player whose turn just
+    ended.
+    """
+    player = state.players[state.current_player]
+    if player.prestige >= 20 or player.crowns >= 10:
+        return state.current_player
+    for color in GEM_COLORS:
+        if _color_points(player, color) >= 10:
+            return state.current_player
+    return None
+
+
+def _discard_subsets(tokens: Tokens, excess: int) -> list[Tokens]:
+    """Enumerate distinct discard subsets of ``tokens`` summing to ``excess``.
+
+    Any colours count, including gold and pearls. The result excludes the
+    empty subset (``excess`` is always >= 1 when called) and is deduplicated.
+    """
+    colors = tuple(Color)
+    results: list[Tokens] = []
+    seen: set[tuple[int, ...]] = set()
+
+    def recurse(idx: int, counts: list[int], remaining: int) -> None:
+        if remaining == 0:
+            key = tuple(counts)
+            if key not in seen:
+                seen.add(key)
+                results.append(Tokens(**{c.value: n for c, n in zip(colors, counts)}))
+            return
+        if idx == len(colors):
+            return
+        color = colors[idx]
+        held = tokens.count(color)
+        # Greedily cap this colour, but never below what the rest can absorb.
+        for take in range(min(held, remaining), -1, -1):
+            counts[idx] = take
+            recurse(idx + 1, counts, remaining - take)
+        counts[idx] = 0
+
+    recurse(0, [0] * len(colors), excess)
+    return results
+
+
 def decide(state: GameState) -> DecisionPoint:
     if state.winner is not None:
         raise ValueError("game is over")
@@ -308,6 +382,15 @@ def decide(state: GameState) -> DecisionPoint:
         ]
         return DecisionPoint(phase=Phase.CHOOSE_ROYAL, legal_actions=tuple(actions))
 
+    if state.phase == Phase.DISCARD:
+        ap = state.players[state.current_player]
+        excess = ap.tokens.total() - _TOKEN_LIMIT
+        actions: list[Action] = [
+            DiscardTokens(tokens=subset)
+            for subset in _discard_subsets(ap.tokens, excess)
+        ]
+        return DecisionPoint(phase=Phase.DISCARD, legal_actions=tuple(actions))
+
     return DecisionPoint(phase=state.phase, legal_actions=())
 
 
@@ -346,6 +429,8 @@ def apply(state: GameState, action: Action) -> GameState:
         return _apply_choose_matching_token(state, action.index)
     if isinstance(action, ChooseRoyal):
         return _apply_choose_royal(state, action.royal_id)
+    if isinstance(action, DiscardTokens):
+        return _apply_discard_tokens(state, action.tokens)
     return state
 
 
@@ -730,11 +815,7 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
             state, players=new_players, privileges_supply=new_priv_supply
         )
 
-    return dataclasses.replace(
-        state,
-        current_player=1 - state.current_player,
-        phase=Phase.USE_PRIVILEGES,
-    )
+    return _end_of_turn(state, active)
 
 
 def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
@@ -777,7 +858,6 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
     """Take the chosen gold token and complete the reserve (all execution in one step)."""
     active = state.current_player
     ap = state.players[active]
-    opp = 1 - active
 
     pending_action = state.pending_reserve
     if pending_action is None:
@@ -823,11 +903,10 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
     new_ap = dataclasses.replace(new_ap, reserved=new_ap.reserved + (reserved_card,))
     state = _replace_player(state, active, new_ap)
 
-    return dataclasses.replace(
-        state,
-        pending_reserve=None,
-        current_player=opp,
-        phase=Phase.USE_PRIVILEGES,
+    # Reserving takes a gold token, so route through the end-of-turn sequence
+    # (discard/win) before the turn passes to the opponent.
+    return _end_of_turn(
+        dataclasses.replace(state, pending_reserve=None), active, extra_turn=False
     )
 
 
@@ -953,34 +1032,10 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     # Update player state
     state = _replace_player(state, active, new_ap)
 
-    # Check win conditions
-    winner = None
-    if new_ap.prestige >= 20 or new_ap.crowns >= 10:
-        winner = active
-    # 10 points in a single color (spec: multicolor cards count as their chosen color;
-    # colorless no-bonus cards and royals do not count)
-    for color in GEM_COLORS:
-        color_points = 0
-        for pc in new_ap.purchased:
-            if pc.card.is_multicolor:
-                if pc.chosen_color == color:
-                    color_points += pc.card.points
-            elif pc.card.bonus == color:
-                color_points += pc.card.points
-        if color_points >= 10:
-            winner = active
-            break
-
-    # Start ability resolution: check multicolor first
-    if winner is not None:
-        # Game over, no abilities resolve
-        return dataclasses.replace(
-            state,
-            pending_buy=None,
-            winner=winner,
-            current_player=active,
-            phase=Phase.GAME_OVER,
-        )
+    # NOTE: victory is *not* checked here. Spec §End of turn and victory fixes
+    # the order as abilities → royals → discard → win check, so the single win
+    # check lives in _finish_turn (via winner_of). Checking here would let a
+    # purchase end the game before its ability/royal/discard steps ran.
 
     # Check if we crossed crown thresholds for royals
     # Royals granted at 3rd and 6th crown (crossing thresholds). Max 2 per player.
@@ -1002,23 +1057,6 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     # But let us look up how it's done. Maybe trigger in order.
 
     if crossed_royal and state.royals_available:
-        # Determine which threshold(s) crossed
-        # If both crossed, need to handle - but easier to just go to choose royal for first threshold crossed
-        # Check which one is the first to be awarded
-        # If we just crossed 3 (and hadn't crossed 6 before?) - if old_crowns < 3 and new_crowns >=3 and new_crowns < 6?
-        # Or just crossed 3 now - that means first royal
-        # If both crossed at once (old_crowns < 3 and new_crowns >=6), then we need to give 2 royals? Unlikely but possible? Let us check - max 2 per player total.
-        # But spec says "upon acquiring your 3rd crown, take one available royal... upon your 6th crown, take another"
-        # So two separate events at the two thresholds. If you somehow jump over both? Probably rare, but better to handle both.
-        # For now, handle the most recent threshold crossed
-        if old_crowns < 6 <= new_crowns and old_crowns >= 3:
-            # crossed only 6th
-            pass
-        elif old_crowns < 3 <= new_crowns < 6:
-            pass
-        # If crossed both (old_crowns < 3 and new_crowns >= 6), we need to give 2 royals?
-        # But only one choice phase at a time. This is complicated. But let us try simple case first.
-        # For Task 7 as written, maybe handle single crossing.
         royal_phase_state = dataclasses.replace(
             state,
             pending_buy=pending_action,
@@ -1028,18 +1066,8 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             extra_turn=False,
             pending_ability=None,
         )
-        # If multicolor, need to handle differently? Multicolor is resolved first - but in our current flow,
-        # if card is multicolor we go to MULTICOLOR_COLOR phase before resolving abilities.
-        # But royals are triggered by crown gain from purchase - when does this happen relative to abilities?
-        # Spec says: "End-of-turn sequence, in order: resolve the purchased card's ability → royal card picks (3rd/6th crowns) → discard..."
-        # But in our current structure, abilities are resolved after purchase; multicolor is handled specially.
-        # The Task 7 says "royals are picked during the end-of-turn sequence starting Task 8" but also says "for now, on crowns crossing 3 or 6 enter CHOOSE_ROYAL"
-        # This is a bit ambiguous. Let us look up how tests expect it.
         if card.is_multicolor:
-            return dataclasses.replace(
-                royal_phase_state,
-                phase=Phase.MULTICOLOR_COLOR,
-            )  # We'll need to handle royals after multicolor; but easier to just go to royal if that's what test expects?
+            return dataclasses.replace(royal_phase_state, phase=Phase.MULTICOLOR_COLOR)
         return royal_phase_state
 
     # Handle multicolor first (separate from abilities)
@@ -1084,7 +1112,7 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
                     pending_ability=Ability.STEAL_TOKEN,
                 )
             # No tokens to steal → normal turn end
-            return _normal_turn_end(state, active)
+            return _end_of_turn(state, active)
 
         case Ability.TAKE_MATCHING_TOKEN:
             # Keep pending_buy for the decision phase to access card's bonus color
@@ -1104,9 +1132,7 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
 
         case None:
             # Clear pending_buy as no ability
-            return _normal_turn_end(
-                dataclasses.replace(state, pending_buy=None), active
-            )
+            return _end_of_turn(dataclasses.replace(state, pending_buy=None), active)
 
 
 def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameState:
@@ -1122,14 +1148,14 @@ def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameS
                 phase=Phase.TAKE_MATCHING_TOKEN,
                 pending_ability=Ability.TAKE_MATCHING_TOKEN,
             )
-    return _normal_turn_end(state, active)
+    return _end_of_turn(state, active)
 
 
 def _run_privilege(state: GameState, card: Card, active: int) -> GameState:
     new_players, new_priv_supply = _grant_privilege(
         state.players, active, state.privileges_supply
     )
-    return _normal_turn_end(
+    return _end_of_turn(
         dataclasses.replace(
             state,
             players=new_players,
@@ -1140,21 +1166,89 @@ def _run_privilege(state: GameState, card: Card, active: int) -> GameState:
 
 
 def _run_extra_turn(state: GameState, card: Card, active: int) -> GameState:
-    return dataclasses.replace(
+    """Resolve an EXTRA_TURN ability: the turn still ends (discard + win check)."""
+    return _end_of_turn(state, active, extra_turn=True)
+
+
+def _end_of_turn(
+    state: GameState, active: int, *, extra_turn: bool = False
+) -> GameState:
+    """Run the end-of-turn sequence for ``active`` (spec §End of turn and victory).
+
+    Order: abilities/royals have already resolved by the time this is called,
+    so this performs discard (if the player holds more than 10 tokens) then the
+    win check, then hands the turn over (or keeps it on an extra turn).
+    """
+    state = dataclasses.replace(
         state,
         current_player=active,
-        phase=Phase.USE_PRIVILEGES,
-        extra_turn=True,
+        pending_buy=None,
+        pending_reserve=None,
+        pending_ability=None,
     )
+    if state.players[active].tokens.total() > _TOKEN_LIMIT:
+        # Defer the win check until after the player discards. ``extra_turn``
+        # carries the pending-seat decision across the DISCARD decision point.
+        return dataclasses.replace(
+            state,
+            phase=Phase.DISCARD,
+            extra_turn=extra_turn,
+        )
+    return _finish_turn(state, active, extra_turn=extra_turn)
 
 
-def _normal_turn_end(state: GameState, active: int) -> GameState:
+def _finish_turn(state: GameState, active: int, *, extra_turn: bool) -> GameState:
+    """Check victory, then end the turn (extra turn keeps the seat).
+
+    Spec §End of turn and victory: the win check happens only here, at the very
+    end of the active player's turn, and an extra turn does not defer it.
+    """
+    winner = winner_of(state)
+    if winner is not None:
+        return dataclasses.replace(
+            state,
+            winner=winner,
+            current_player=active,
+            phase=Phase.GAME_OVER,
+            extra_turn=False,
+        )
+    if extra_turn:
+        return dataclasses.replace(
+            state,
+            current_player=active,
+            phase=Phase.USE_PRIVILEGES,
+            extra_turn=True,
+        )
     return dataclasses.replace(
         state,
-        current_player=active,
+        current_player=1 - active,
         phase=Phase.USE_PRIVILEGES,
         extra_turn=False,
     )
+
+
+def _apply_discard_tokens(state: GameState, tokens: Tokens) -> GameState:
+    """Move chosen excess tokens from the active player's hand to the bag."""
+    active = state.current_player
+    ap = state.players[active]
+    excess = ap.tokens.total() - _TOKEN_LIMIT
+
+    for color in Color:
+        if tokens.count(color) < 0:
+            raise ValueError("discard counts must be non-negative")
+        if tokens.count(color) > ap.tokens.count(color):
+            raise ValueError(f"cannot discard more {color} than held")
+    if tokens.total() != excess:
+        raise ValueError("discard must remove exactly the excess tokens")
+
+    # Tokens go to the bag (spec: excess goes to the bag).
+    state = _add_to_bag(state, tokens)
+    new_ap = dataclasses.replace(ap, tokens=ap.tokens - tokens)
+    state = _replace_player(state, active, new_ap)
+
+    # The pending seat decision was stashed in ``extra_turn`` by _end_of_turn.
+    pending_extra_turn = state.extra_turn
+    return _finish_turn(state, active, extra_turn=pending_extra_turn)
 
 
 def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
@@ -1224,7 +1318,7 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
     new_players[opp] = new_opp
 
     # After steal: normal turn end (no other abilities on steal cards)
-    return _normal_turn_end(
+    return _end_of_turn(
         dataclasses.replace(
             state,
             players=tuple(new_players),
@@ -1267,7 +1361,7 @@ def _apply_choose_matching_token(state: GameState, index: int) -> GameState:
     )
 
     # Normal turn end
-    return _normal_turn_end(
+    return _end_of_turn(
         dataclasses.replace(
             state,
             players=tuple(new_players),
@@ -1320,12 +1414,12 @@ def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
                         phase=Phase.STEAL_TOKEN,
                         pending_ability=Ability.STEAL_TOKEN,
                     )
-                return _normal_turn_end(state, active)
+                return _end_of_turn(state, active)
             case Ability.PRIVILEGE:
                 new_players2, new_priv_supply = _grant_privilege(
                     state.players, active, state.privileges_supply
                 )
-                return _normal_turn_end(
+                return _end_of_turn(
                     dataclasses.replace(
                         state,
                         players=new_players2,
@@ -1334,12 +1428,7 @@ def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
                     active,
                 )
             case Ability.EXTRA_TURN:
-                return dataclasses.replace(
-                    state,
-                    current_player=active,
-                    phase=Phase.USE_PRIVILEGES,
-                    extra_turn=True,
-                )
+                return _end_of_turn(state, active, extra_turn=True)
             case _:
-                return _normal_turn_end(state, active)
-    return _normal_turn_end(state, active)
+                return _end_of_turn(state, active)
+    return _end_of_turn(state, active)

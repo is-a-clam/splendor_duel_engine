@@ -32,7 +32,7 @@ def _setup_buy_state(base_st: GameState, player: int = 0) -> tuple[GameState, ob
             replace(
                 base_st.players[player],
                 bonus=Tokens(white=1),
-                tokens=Tokens(gold=20),
+                tokens=Tokens(gold=10),
             ),
             base_st.players[1 - player],
         ),
@@ -77,7 +77,7 @@ class TestExtraTurn:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -124,7 +124,7 @@ class TestExtraTurn:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -168,7 +168,7 @@ class TestTakeMatchingToken:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -227,7 +227,7 @@ class TestTakeMatchingToken:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -265,7 +265,7 @@ class TestPrivilegeAbility:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                     privileges=0,
                 ),
@@ -300,7 +300,7 @@ class TestStealToken:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 replace(
@@ -338,12 +338,13 @@ class TestStealToken:
         assert st.players[0].tokens.white == 1
         # Gold should be reduced by payment amount (card costs 4 white + 3 green = 7, paid with gold)
         # We don't assert exact gold amount since payment enumeration may vary,
-        # but gold should be less than 20
-        assert st.players[0].tokens.gold < 20
+        # but gold should be less than 10
+        assert st.players[0].tokens.gold < 10
 
-        # Should return to USE_PRIVILEGES for same player
+        # The turn is over: the seat passes to the opponent, who starts at
+        # USE_PRIVILEGES (spec §End of turn and victory).
         assert st.phase is Phase.USE_PRIVILEGES
-        assert st.current_player == 0
+        assert st.current_player == 1
         assert st.pending_ability is None
 
     def test_steal_ignored_when_opponent_has_no_tokens(self):
@@ -364,7 +365,7 @@ class TestStealToken:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 replace(base_st.players[1], tokens=Tokens()),  # Opponent has NO tokens
@@ -373,9 +374,10 @@ class TestStealToken:
 
         st = _complete_buy(st, steal_card)
 
-        # Should NOT enter STEAL_TOKEN phase; should go straight to USE_PRIVILEGES
+        # Should NOT enter STEAL_TOKEN phase; the purchase ends the turn, so the
+        # seat passes to the opponent at USE_PRIVILEGES.
         assert st.phase is Phase.USE_PRIVILEGES
-        assert st.current_player == 0
+        assert st.current_player == 1
         assert st.pending_ability is None
 
 
@@ -397,7 +399,7 @@ class TestMulticolor:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),  # Need colored bonus to buy multicolor
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -443,9 +445,10 @@ class TestMulticolor:
         # Prestige should count toward white for 10-point win check
         # (Task 8 will read this, but we verify chosen_color is set)
 
-        # Should return to USE_PRIVILEGES
+        # The purchase ends the turn: seat passes to the opponent at
+        # USE_PRIVILEGES.
         assert st.phase is Phase.USE_PRIVILEGES
-        assert st.current_player == 0
+        assert st.current_player == 1
 
     def test_multicolor_copies_only_bonus_not_ability(self):
         """Multicolor copies the bonus, never an ability: multicolor-only card fires no extra ability."""
@@ -464,7 +467,7 @@ class TestMulticolor:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -504,7 +507,7 @@ class TestMulticolor:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -544,7 +547,7 @@ class TestAbilityResolutionOrder:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 base_st.players[1],
@@ -584,7 +587,7 @@ class TestAbilityResolutionOrder:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),  # Has colored bonus for multicolor choice
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 replace(
@@ -630,7 +633,7 @@ class TestAbilityResolutionOrder:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 replace(
@@ -673,7 +676,7 @@ class TestPendingAbilityField:
                 replace(
                     base_st.players[0],
                     bonus=Tokens(white=1),
-                    tokens=Tokens(gold=20),
+                    tokens=Tokens(gold=10),
                     reserved=(reserved,),
                 ),
                 replace(base_st.players[1], tokens=Tokens(white=1)),
