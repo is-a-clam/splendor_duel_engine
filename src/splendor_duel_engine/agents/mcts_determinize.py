@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from splendor_duel_engine.engine.cards import Card
+from splendor_duel_engine.engine.cards import Card, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.observation import Observation, PlayerView
 from splendor_duel_engine.engine.state import GameState, PlayerState, ReservedCard
@@ -14,6 +14,9 @@ from splendor_duel_engine.engine.state import GameState, PlayerState, ReservedCa
 GOLD_TOTAL = 3
 PEARL_TOTAL = 2
 GEM_TOTAL = 4  # 4 each of 5 gem colors
+
+# Total cards per level (from rules)
+TOTAL_PER_LEVEL = {1: 30, 2: 24, 3: 13}
 
 
 def determinize(observation: Observation, rng: random.Random) -> GameState:
@@ -29,11 +32,10 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
     # --- Compute exact bag multiset (public deduction) ---
     bag_multiset = _compute_bag_multiset(observation)
 
-    # --- Sample deck order consistent with deck counts ---
-    decks = _sample_decks(observation, rng)
-
-    # --- Sample opponent face-down reserved cards ---
-    opp_reserved = _sample_opponent_reserved(observation, rng, decks)
+    # --- Build remaining pools and partition into decks + opponent hidden reserves ---
+    pools = _build_remaining_pools(observation)
+    decks_dict, opp_reserved = _partition_pools(pools, observation, rng)
+    decks = (decks_dict[3], decks_dict[2], decks_dict[1])
 
     # --- Build player states ---
     current_player = observation.current_player
@@ -80,6 +82,120 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
         pending_royal=False,
         rng=det_rng,
     )
+
+
+def _build_remaining_pools(obs: Observation) -> dict[int, list[Card]]:
+    """Returns {level: list[Card]} of all unseen cards (not in pyramid, purchased, face-up reserved, or your hidden reserves)."""
+    jewels, _ = load_cards()
+    excluded_ids: set[str] = set()
+
+    # Pyramid cards (face-up)
+    for row in obs.pyramid:
+        for card in row:
+            if card is not None:
+                excluded_ids.add(card.id)
+
+    # Purchased cards (both players)
+    for card in obs.you.purchased:
+        excluded_ids.add(card.card.id)
+    for card in obs.opponent.purchased:
+        excluded_ids.add(card.card.id)
+
+    # Face-up reserved cards (both players)
+    for rc in obs.you.reserved_public:
+        excluded_ids.add(rc.id)
+    for rc in obs.opponent.reserved_public:
+        excluded_ids.add(rc.id)
+
+    # Your hidden deck reserves (known to you, not in decks)
+    for card in obs.your_reserved_deck:
+        excluded_ids.add(card.id)
+
+    pools: dict[int, list[Card]] = {1: [], 2: [], 3: []}
+    for card in jewels:
+        if card.id not in excluded_ids:
+            pools[card.level].append(card)
+
+    return pools
+
+
+def _compute_known_per_level(obs: Observation) -> dict[int, int]:
+    """Count known cards per level (pyramid, purchased, face-up reserved, your hidden reserves)."""
+    known_per_level: dict[int, int] = defaultdict(int)
+    for row in obs.pyramid:
+        for card in row:
+            if card is not None:
+                known_per_level[card.level] += 1
+    for card in obs.you.purchased:
+        known_per_level[card.card.level] += 1
+    for card in obs.opponent.purchased:
+        known_per_level[card.card.level] += 1
+    for rc in obs.you.reserved_public:
+        known_per_level[rc.level] += 1
+    for rc in obs.opponent.reserved_public:
+        known_per_level[rc.level] += 1
+    for card in obs.your_reserved_deck:
+        known_per_level[card.level] += 1
+    return known_per_level
+
+
+def _partition_pools(
+    pools: dict[int, list[Card]], obs: Observation, rng: random.Random
+) -> tuple[dict[int, tuple[Card, ...]], list[ReservedCard]]:
+    """
+    Partition pools into:
+    - decks: exactly obs.deck_counts[level] cards per level (top card last)
+    - opponent hidden reserves: hidden_per_level[level] cards per level
+
+    hidden_per_level = total_per_level - known_per_level - deck_counts[level]
+    where known_per_level includes pyramid, purchased, face-up reserved, your hidden reserves
+    """
+    deck_counts = obs.deck_counts  # (level3, level2, level1)
+    deck_counts_by_level = {3: deck_counts[0], 2: deck_counts[1], 1: deck_counts[2]}
+
+    # Compute known per level (excluding opponent hidden reserves)
+    known_per_level = _compute_known_per_level(obs)
+
+    # Compute hidden reserves per level
+    hidden_per_level: dict[int, int] = {}
+    for level in (1, 2, 3):
+        hidden_per_level[level] = (
+            TOTAL_PER_LEVEL[level]
+            - known_per_level[level]
+            - deck_counts_by_level[level]
+        )
+        assert hidden_per_level[level] >= 0, f"Negative hidden count for level {level}"
+
+    # Invariant check: pool size must match deck + hidden_per_level (all unseen cards at this level)
+    for level in (1, 2, 3):
+        expected_pool_size = deck_counts_by_level[level] + hidden_per_level[level]
+        assert len(pools[level]) == expected_pool_size, (
+            f"Pool size mismatch for level {level}: {len(pools[level])} != {expected_pool_size} "
+            f"(total={TOTAL_PER_LEVEL[level]}, known={known_per_level[level]}, deck={deck_counts_by_level[level]}, hidden={hidden_per_level[level]})"
+        )
+
+    # Sample decks
+    decks: dict[int, tuple[Card, ...]] = {}
+    for level in (1, 2, 3):
+        count = deck_counts_by_level[level]
+        sampled = rng.sample(pools[level], count)
+        decks[level] = tuple(sampled)
+        # Remove sampled from pools
+        for card in sampled:
+            pools[level].remove(card)
+
+    # Sample opponent hidden reserves
+    opp_reserved: list[ReservedCard] = []
+    for level in (1, 2, 3):
+        count = hidden_per_level[level]
+        sampled = rng.sample(pools[level], count)
+        for card in sampled:
+            opp_reserved.append(ReservedCard(card=card, from_deck=True))
+        for card in sampled:
+            pools[level].remove(card)
+
+    # Return decks in GameState order: (level3, level2, level1)
+    return ({3: decks[3], 2: decks[2], 1: decks[1]}, opp_reserved)
 
 
 def _compute_bag_multiset(obs: Observation) -> Tokens:
@@ -129,164 +245,7 @@ def _count_public_physical_tokens(obs: Observation) -> dict[Color, int]:
         count = obs.opponent.tokens.count(color)
         if count:
             counts[color] += count
-    # NOTE: Purchased card bonuses and reserved card bonuses are NOT physical tokens.
-    # They are permanent purchasing power discounts. The bag census (25 tokens)
-    # only tracks physical tokens: board + hands + bag.
-    # Opponent face-down reserves have gold bonuses, but these are also NOT
-    # physical tokens - they're purchasing power bonuses.
     return counts
-
-
-def _sample_decks(
-    obs: Observation, rng: random.Random
-) -> tuple[tuple[Card, ...], tuple[Card, ...], tuple[Card, ...]]:
-    # obs.deck_counts gives (level3_count, level2_count, level1_count)
-    # For each level, sample that many cards from the appropriate pool without replacement
-    # Pool = all cards of that level minus those in pyramid, purchased, reserved (face-up), and your hidden reserves
-    from splendor_duel_engine.engine.cards import load_cards
-
-    jewels, _ = load_cards()
-
-    # Build excluded card IDs from public information + your known hidden reserves
-    excluded_ids: set[str] = set()
-
-    # Pyramid cards (face-up)
-    for row in obs.pyramid:
-        for card in row:
-            if card is not None:
-                excluded_ids.add(card.id)
-
-    # Purchased cards (both players)
-    for card in obs.you.purchased:
-        excluded_ids.add(card.card.id)
-    for card in obs.opponent.purchased:
-        excluded_ids.add(card.card.id)
-
-    # Face-up reserved cards (both players)
-    for rc in obs.you.reserved_public:
-        excluded_ids.add(rc.id)
-    for rc in obs.opponent.reserved_public:
-        excluded_ids.add(rc.id)
-
-    # Your hidden reserved cards (from deck) — known to you, cannot be in decks
-    for card in obs.your_reserved_deck:
-        excluded_ids.add(card.id)
-
-    # For each level, filter available cards and sample
-    decks_result: list[tuple[Card, ...]] = []
-    deck_counts = obs.deck_counts  # (level3, level2, level1)
-
-    for level_idx, count in enumerate(deck_counts):
-        level = 3 - level_idx  # level3 -> idx0, level2 -> idx1, level1 -> idx2
-        pool = [c for c in jewels if c.level == level and c.id not in excluded_ids]
-        assert len(pool) >= count, (
-            f"Not enough cards in pool for level {level}: need {count}, have {len(pool)}"
-        )
-        sampled = rng.sample(pool, count)
-        # Store with top card last (same as GameState convention)
-        decks_result.append(tuple(sampled))
-
-    return tuple(decks_result)  # type: ignore[return-value]
-
-
-def _sample_opponent_reserved(
-    obs: Observation,
-    rng: random.Random,
-    decks: tuple[tuple[Card, ...], tuple[Card, ...], tuple[Card, ...]],
-) -> list[ReservedCard]:
-    # obs.opponent.reserved_deck_count gives total deck-reserved (hidden)
-    # obs.opponent.reserved_public gives face-up ones
-    # Hidden count = reserved_deck_count
-    # Sample hidden cards from decks (same pool as deck sampling) without replacement
-    # Each hidden reserve has a gold bonus token (purchasing power, not physical)
-
-    hidden_count = obs.opponent.reserved_deck_count
-    if hidden_count == 0:
-        return []
-
-    # Build the same pool as _sample_decks
-    from splendor_duel_engine.engine.cards import load_cards
-
-    jewels, _ = load_cards()
-
-    excluded_ids: set[str] = set()
-    for row in obs.pyramid:
-        for card in row:
-            if card is not None:
-                excluded_ids.add(card.id)
-    for card in obs.you.purchased:
-        excluded_ids.add(card.card.id)
-    for card in obs.opponent.purchased:
-        excluded_ids.add(card.card.id)
-    for rc in obs.you.reserved_public:
-        excluded_ids.add(rc.id)
-    for rc in obs.opponent.reserved_public:
-        excluded_ids.add(rc.id)
-    # Also exclude your hidden reserves (known to you)
-    for card in obs.your_reserved_deck:
-        excluded_ids.add(card.id)
-
-    # Also exclude cards already in decks
-    for deck in decks:
-        for card in deck:
-            excluded_ids.add(card.id)
-
-    # Pool of remaining cards by level
-    pool_by_level: dict[int, list[Card]] = {1: [], 2: [], 3: []}
-    for card in jewels:
-        if card.id not in excluded_ids:
-            pool_by_level[card.level].append(card)
-
-    # We need to sample hidden_count cards from the combined pool.
-    # In the real game, deck-reserved cards come from the top of their respective decks.
-    # From an information set perspective, we sample cards consistent with
-    # the remaining deck counts per level.
-    # hidden_per_level = total_per_level - known_per_level - deck_counts
-
-    total_per_level = {1: 30, 2: 24, 3: 13}
-
-    known_per_level: dict[int, int] = defaultdict(int)
-    for row in obs.pyramid:
-        for card in row:
-            if card is not None:
-                known_per_level[card.level] += 1
-    for card in obs.you.purchased:
-        known_per_level[card.card.level] += 1
-    for card in obs.opponent.purchased:
-        known_per_level[card.card.level] += 1
-    for rc in obs.you.reserved_public:
-        known_per_level[rc.level] += 1
-    for rc in obs.opponent.reserved_public:
-        known_per_level[rc.level] += 1
-    # Your hidden reserves are KNOWN to you — they reduce the pool for opponent's hidden reserves
-    for card in obs.your_reserved_deck:
-        known_per_level[card.level] += 1
-
-    deck_counts = obs.deck_counts  # (level3, level2, level1)
-    deck_counts_by_level = {3: deck_counts[0], 2: deck_counts[1], 1: deck_counts[2]}
-
-    hidden_per_level: dict[int, int] = {}
-    for level in (1, 2, 3):
-        hidden_per_level[level] = (
-            total_per_level[level]
-            - known_per_level[level]
-            - deck_counts_by_level[level]
-        )
-        assert hidden_per_level[level] >= 0, f"Negative hidden count for level {level}"
-
-    # Now sample from each level's pool
-    result: list[ReservedCard] = []
-    for level in (1, 2, 3):
-        count = hidden_per_level[level]
-        pool = pool_by_level[level]
-        assert len(pool) >= count, (
-            f"Not enough cards in level {level} pool for {count} hidden reserves"
-        )
-        sampled = rng.sample(pool, count)
-        for card in sampled:
-            result.append(ReservedCard(card=card, from_deck=True))
-
-    return result
 
 
 def _build_player_state(
@@ -296,7 +255,7 @@ def _build_player_state(
     reserved_hidden: tuple[Card, ...] | list[ReservedCard] | None = None,
 ) -> PlayerState:
     # Copy tokens, bonus, prestige, crowns, purchased, reserved_public from view
-    # If reserved_hidden provided, append to reserved (each gets a gold bonus)
+    # If reserved_hidden provided, append to reserved
 
     reserved_list: list[ReservedCard] = []
 

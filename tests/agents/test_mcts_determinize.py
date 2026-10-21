@@ -376,3 +376,136 @@ def _compute_exact_bag_multiset(obs: Observation) -> Tokens:
             counts[color.value] = count
 
     return Tokens(**counts)
+
+
+def test_determinize_invariant_check():
+    """Verify the card count invariant: total = known + deck + hidden_reserves + pool_remaining.
+
+    This test runs determinization on multiple random game states and verifies that
+    the invariant holds at the point of partitioning pools.
+    """
+    import random as pyrandom
+
+    # Test on initial state
+    state = new_game(0)
+    obs = observation(state, 0)
+    for seed in range(20):
+        det = determinize(obs, random.Random(seed))
+        _verify_card_invariant(obs, det)
+
+    # Test on state with opponent reserved
+    state = _make_state_with_opponent_reserved()
+    obs = observation(state, 0)
+    for seed in range(20):
+        det = determinize(obs, random.Random(seed))
+        _verify_card_invariant(obs, det)
+
+    # Test on state with your reserved deck
+    state = _make_state_with_your_reserved_deck()
+    obs = observation(state, 0)
+    for seed in range(20):
+        det = determinize(obs, random.Random(seed))
+        _verify_card_invariant(obs, det)
+
+    # Test on mid-game state with purchases
+    state = _make_midgame_state_with_purchases()
+    obs = observation(state, 0)
+    for seed in range(20):
+        det = determinize(obs, random.Random(seed))
+        _verify_card_invariant(obs, det)
+
+    # Test with random seeds for initial game
+    for game_seed in range(10):
+        state = new_game(game_seed)
+        # Advance a few random turns
+        for _ in range(pyrandom.randint(0, 5)):
+            if state.phase == Phase.MANDATORY:
+                from splendor_duel_engine.engine.actions import TakeTokens, decide
+
+                dp = decide(state)
+                take_actions = [
+                    a for a in dp.legal_actions if isinstance(a, TakeTokens)
+                ]
+                if take_actions:
+                    state = apply(state, take_actions[0])
+                    while state.phase != Phase.MANDATORY:
+                        dp = decide(state)
+                        if state.phase == Phase.USE_PRIVILEGES:
+                            state = apply(state, DoneWithPrivileges())
+                        elif state.phase == Phase.REPLENISH:
+                            state = apply(state, DoneWithReplenish())
+                        elif state.phase == Phase.DISCARD:
+                            from splendor_duel_engine.engine.actions import (
+                                DiscardTokens,
+                            )
+
+                            discard_action = next(
+                                a
+                                for a in dp.legal_actions
+                                if isinstance(a, DiscardTokens)
+                            )
+                            state = apply(state, discard_action)
+                        else:
+                            state = apply(state, dp.legal_actions[0])
+                else:
+                    break
+            else:
+                break
+        obs = observation(state, state.current_player)
+        for seed in range(10):
+            det = determinize(obs, random.Random(seed))
+            _verify_card_invariant(obs, det)
+
+
+def _verify_card_invariant(obs: Observation, det_state) -> None:
+    """Verify the card count invariants:
+    1. known + deck + opp_hidden == total (all cards accounted for)
+    2. pre_sampling_pool_size == deck + opp_hidden (pool contains exactly deck + hidden cards)
+    """
+    from splendor_duel_engine.agents.mcts_determinize import (
+        TOTAL_PER_LEVEL,
+        _build_remaining_pools,
+        _compute_known_per_level,
+    )
+
+    pools = _build_remaining_pools(obs)
+    known_per_level = _compute_known_per_level(obs)
+
+    deck_counts = obs.deck_counts  # (level3, level2, level1)
+    deck_counts_by_level = {3: deck_counts[0], 2: deck_counts[1], 1: deck_counts[2]}
+
+    # Count opponent hidden reserves per level in the determinized state
+    # det_state.players[0] = engine player 0, det_state.players[1] = engine player 1
+    # obs.current_player tells us which engine player is "you"
+    if obs.current_player == 0:
+        # You are engine player 0, opponent is engine player 1
+        opp_player = det_state.players[1]
+    else:
+        # You are engine player 1, opponent is engine player 0
+        opp_player = det_state.players[0]
+
+    opp_hidden_per_level: dict[int, int] = {1: 0, 2: 0, 3: 0}
+    for rc in opp_player.reserved:
+        if rc.from_deck:
+            opp_hidden_per_level[rc.card.level] += 1
+
+    # Verify invariant for each level
+    for level in (1, 2, 3):
+        total = TOTAL_PER_LEVEL[level]
+        known = known_per_level[level]
+        deck = deck_counts_by_level[level]
+        opp_hidden = opp_hidden_per_level[level]
+        pre_sampling_pool_size = len(pools[level])
+
+        # Invariant 1: All cards accounted for
+        assert known + deck + opp_hidden == total, (
+            f"Card count invariant violated for level {level}: "
+            f"known={known} + deck={deck} + opp_hidden={opp_hidden} "
+            f"= {known + deck + opp_hidden} != total={total}"
+        )
+
+        # Invariant 2: Pre-sampling pool contains exactly deck + hidden cards
+        assert pre_sampling_pool_size == deck + opp_hidden, (
+            f"Pool size invariant violated for level {level}: "
+            f"pool={pre_sampling_pool_size} != deck+opp_hidden={deck + opp_hidden}"
+        )
