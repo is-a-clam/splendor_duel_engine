@@ -85,13 +85,18 @@ def legal_payments(card: Card, tokens: Tokens, bonus: Tokens) -> list[Tokens]:
 
     Returns every legal way to pay for ``card``. For each combination of
     coloured tokens and pearls the player may spend, only the *minimum* gold
-    needed to cover that combination's shortfall is yielded: spending more gold
-    than the shortfall requires is never a legal payment, but paying a shortfall
-    in gold while holding matching coloured tokens is still yielded.
+    needed to cover that combination's shortfall is yielded. The shortfall of
+    a combination is taken from :func:`cost_deficits` -- the same public rule
+    :func:`can_afford_card` uses -- so the gate and the enumeration can never
+    disagree about what a colour is short.
 
-    The result is empty exactly when :func:`can_afford_card` is false (so
+    Spending gold beyond the shortfall is redundant rather than illegal:
+    ``apply()`` accepts excess gold, but the enumeration never proposes it,
+    because the extra gold buys nothing.
+
+    The result is empty exactly when :func:`can_afford_card` is false, so
     ``decide()`` and ``apply()`` agree: a payment is offered exactly when it
-    would be accepted).
+    would be accepted.
 
     The enumeration order is the white, blue, green, red, black, pearl loop
     order.
@@ -107,28 +112,30 @@ def legal_payments(card: Card, tokens: Tokens, bonus: Tokens) -> list[Tokens]:
                 for r in range(min(tokens.red, remaining.red) + 1):
                     for bl in range(min(tokens.black, remaining.black) + 1):
                         for p in range(min(tokens.pearl, remaining.pearl) + 1):
-                            deficit = 0
-                            for color, paid in (
-                                (Color.WHITE, w),
-                                (Color.BLUE, b),
-                                (Color.GREEN, g),
-                                (Color.RED, r),
-                                (Color.BLACK, bl),
-                            ):
-                                needed = remaining.count(color)
-                                deficit += max(0, needed - paid)
-                            deficit += max(0, remaining.pearl - p)
+                            paid = Tokens(
+                                white=w,
+                                blue=b,
+                                green=g,
+                                red=r,
+                                black=bl,
+                                pearl=p,
+                            )
+                            # One definition of the shortfall rule: cost_deficits.
+                            deficit = sum(
+                                cost_deficits(card.cost, bonus, paid).values()
+                            )
                             if deficit <= tokens.gold:
-                                payment = Tokens(
-                                    white=w,
-                                    blue=b,
-                                    green=g,
-                                    red=r,
-                                    black=bl,
-                                    pearl=p,
-                                    gold=deficit,
+                                legal.append(
+                                    Tokens(
+                                        white=w,
+                                        blue=b,
+                                        green=g,
+                                        red=r,
+                                        black=bl,
+                                        pearl=p,
+                                        gold=deficit,
+                                    )
                                 )
-                                legal.append(payment)
 
     # Deduplicate if necessary (enumeration shouldn't produce duplicates)
     unique = []

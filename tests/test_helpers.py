@@ -207,7 +207,7 @@ def test_can_afford_card_does_not_require_a_bonus_for_ordinary_cards():
 # --- legal_payments ------------------------------------------------------
 
 
-def test_legal_payments_yields_only_the_minimum_gold():
+def test_legal_payments_uses_minimum_gold_per_combination():
     # The minimum gold is per combination of coloured tokens and pearls: each
     # combination is yielded with the minimum gold needed for *that* combination.
     card = make_card(cost=Tokens(white=2))
@@ -245,3 +245,72 @@ def test_legal_payments_is_empty_when_the_card_is_unaffordable():
 def test_legal_payments_is_empty_for_multicolor_without_a_coloured_bonus():
     card = make_card(cost=Tokens(white=3), is_multicolor=True, bonus_count=1)
     assert legal_payments(card, Tokens(gold=3), Tokens()) == []
+
+
+def test_legal_payments_applies_a_bonus_to_the_cost():
+    # The bonus reduces the cost from three white to two white, so two gold
+    # covers it (without the bonus it would take three gold).
+    card = make_card(cost=Tokens(white=3))
+    assert legal_payments(card, Tokens(gold=2), Tokens(white=1)) == [Tokens(gold=2)]
+
+
+def test_legal_payments_for_an_affordable_multicolor_card():
+    # A multicolor card the player may buy: they hold a coloured bonus, so the
+    # payments are yielded and the gold covers the remaining shortfall.
+    card = make_card(cost=Tokens(white=3), is_multicolor=True, bonus_count=1)
+    tokens = Tokens(gold=3)
+    bonus = Tokens(white=1)
+    payments = legal_payments(card, tokens, bonus)
+    assert payments == [Tokens(gold=2)]
+    for payment in payments:
+        assert payment.gold == sum(cost_deficits(card.cost, bonus, payment).values())
+        assert payment.gold <= tokens.gold
+
+
+def test_legal_payments_covers_a_pearl_cost_partly_with_gold():
+    # Gold is wild for pearls too: one pearl plus one gold covers two pearls.
+    card = make_card(cost=Tokens(pearl=2))
+    assert legal_payments(card, Tokens(pearl=1, gold=1), Tokens()) == [
+        Tokens(pearl=1, gold=1)
+    ]
+
+
+def test_legal_payments_gold_always_equals_the_cost_deficits_it_leaves_open():
+    # Regression guard: the enumeration and the affordability gate must share
+    # one rule. Every yielded payment's gold is exactly the shortfall that
+    # cost_deficits() reports for it, and the payment list is empty exactly
+    # when can_afford_card() is false.
+    positions = [
+        # (cost, tokens, bonus, is_multicolor)
+        (Tokens(white=2), Tokens(white=2, gold=3), Tokens(), False),
+        (Tokens(white=3), Tokens(white=2, gold=1), Tokens(), False),
+        (Tokens(white=5), Tokens(white=1, gold=1), Tokens(), False),
+        (Tokens(white=3), Tokens(gold=2), Tokens(white=1), False),
+        (Tokens(white=3), Tokens(gold=3), Tokens(white=1), True),
+        (Tokens(white=3), Tokens(gold=3), Tokens(), True),
+        (Tokens(pearl=2), Tokens(pearl=1, gold=1), Tokens(), False),
+        (
+            Tokens(white=2, blue=2, pearl=1),
+            Tokens(white=3, blue=1, pearl=2, gold=4),
+            Tokens(),
+            False,
+        ),
+        (
+            Tokens(white=1, red=2, black=1),
+            Tokens(white=2, red=3, black=1, pearl=1, gold=2),
+            Tokens(red=1),
+            False,
+        ),
+    ]
+    for cost, tokens, bonus, is_multicolor in positions:
+        card = make_card(
+            cost=cost,
+            is_multicolor=is_multicolor,
+            bonus_count=1 if is_multicolor else 0,
+        )
+        payments = legal_payments(card, tokens, bonus)
+        assert bool(payments) == can_afford_card(card, tokens, bonus)
+        for payment in payments:
+            assert payment.gold == sum(
+                cost_deficits(card.cost, bonus, payment).values()
+            )

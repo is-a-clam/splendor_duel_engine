@@ -117,6 +117,10 @@ Semantics:
   remaining shortfall. This is a *per-combination* minimum, not a global one:
   a payment that spends fewer coloured tokens and covers the shortfall with
   more gold is still a legal payment and is still yielded.
+- The shortfall of a combination is `sum(cost_deficits(card.cost, bonus, paid).values())`,
+  where `paid` is the combination's coloured tokens and pearls: the enumeration
+  and `can_afford_card` share the one public shortfall rule, so they cannot
+  disagree about what a colour is short.
 - The result is ordered: the white, blue, green, red, black and pearl loops
   nest in that order, because `decide()` offers payments in that order.
 
