@@ -16,7 +16,9 @@ from splendor_duel_engine.engine.state import GameState
 # Factory functions for playout policies to ensure fresh RNG per playout.
 # Both are callables accepting a seed derived from the MCTS RNG.
 PLAYOUT_POLICIES = {
-    "greedy": lambda seed: GreedyAgent(seed=seed),
+    "greedy": lambda seed: (
+        GreedyAgent()
+    ),  # GreedyAgent doesn't use seed, but keep consistent signature
     "random": lambda seed: RandomAgent(seed=seed),
 }
 
@@ -219,13 +221,15 @@ def playout(
     playout_policy: str = "greedy",
     max_depth: int = 15,
 ) -> float:
-    """Simulate from the current state up to max_depth plies, then evaluate heuristically.
+    """
+    Simulate from current state with limited-depth playout.
 
-    Returns the result from the perspective of the player whose turn it is
-    in the given state: 1.0 for win, 0.5 for draw, 0.0 for loss.
-
-    The state's RNG (from determinization) is used for game-internal randomness.
-    Agent seeds are derived from the passed ``rng``.
+    - state.rng is pre-seeded from determinization (for tree determinism)
+    - engine.apply deep-copies state.rng before any random draw
+    - First replenish: uses the pre-seeded RNG (deterministic per root)
+    - Subsequent random draws: use the advanced RNG from previous draws
+    - playout_policy agents are seeded from MCTS RNG for decision randomness
+    - Playouts stop at max_depth plies and return heuristic evaluation
 
     Args:
         state: Starting game state (must be determinized).

@@ -56,6 +56,10 @@ python -m splendor_duel_engine.eval.arena random random -n 100
 
 # Custom seed base
 python -m splendor_duel_engine.eval.arena greedy random -n 50 --seed 42
+
+# MCTS agent examples
+python -m splendor_duel_engine.eval.arena mcts greedy -n 100
+python -m splendor_duel_engine.eval.arena mcts random -n 100
 ```
 
 Output shows win counts, win rates, and average turns per game.
