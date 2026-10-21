@@ -31,12 +31,19 @@ _PYRAMID_LAYOUT: tuple[tuple[int, int], ...] = ((3, 0), (4, 1), (5, 2))
 #: starts with one, leaving the rest in the supply.
 _TOTAL_PRIVILEGES: int = 3
 
+#: Total tokens of each gem colour in the game (spec §Components and setup).
+GEM_TOTAL: int = 4
+#: Total pearl tokens in the game (spec §Components and setup).
+PEARL_TOTAL: int = 2
+#: Total gold tokens in the game (spec §Components and setup).
+GOLD_TOTAL: int = 3
+
 #: The 25-token supply in the order it is shuffled at setup (spec: 4 each of
 #: the five gems, 2 pearls, 3 gold). Pinned so the deal is reproducible.
 _TOKEN_SUPPLY: tuple[Color, ...] = (
-    tuple(color for color in GEM_COLORS for _ in range(4))
-    + (Color.PEARL,) * 2
-    + (Color.GOLD,) * 3
+    tuple(color for color in GEM_COLORS for _ in range(GEM_TOTAL))
+    + (Color.PEARL,) * PEARL_TOTAL
+    + (Color.GOLD,) * GOLD_TOTAL
 )
 
 
@@ -78,25 +85,6 @@ class PlayerState:
     reserved: tuple[ReservedCard, ...]
     purchased: tuple[PurchasedCard, ...]
     privileges: int
-
-    def color_prestige(self, color: Color) -> int:
-        """Return total prestige points in the given color.
-
-        Includes points from purchased cards whose bonus matches the color,
-        and the bonus counts themselves (each bonus counts as 1 point in that color).
-        For multicolor cards, the chosen_color determines which color gets the points.
-        """
-        total = 0
-        for pc in self.purchased:
-            card = pc.card
-            # Determine the effective bonus color for this card
-            effective_bonus = pc.chosen_color if card.is_multicolor else card.bonus
-            if effective_bonus == color:
-                # Card points count toward that color's prestige
-                total += card.points
-                # Each bonus also counts as 1 point in that color
-                total += card.bonus_count
-        return total
 
 
 @dataclass(frozen=True, slots=True)

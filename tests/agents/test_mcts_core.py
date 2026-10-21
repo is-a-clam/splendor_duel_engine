@@ -282,7 +282,7 @@ def test_playout_from_near_terminal_state():
     """
     from dataclasses import replace as dc_replace
 
-    from splendor_duel_engine.engine.state import Phase, PlayerState, Tokens
+    from splendor_duel_engine.engine.state import Phase
 
     # Create a near-terminal state: player 0 has 19 prestige and can buy a 1-point card
     jewels, _royals = load_cards()
@@ -394,7 +394,6 @@ def test_heuristic_evaluation_favors_leading_player():
     from dataclasses import replace as dc_replace
 
     from splendor_duel_engine.engine.cards import Card
-    from splendor_duel_engine.engine.state import PlayerState, Tokens
 
     # Create a state where player 0 is clearly winning
     base_state = _advance_to_mandatory(new_game(0))
@@ -511,108 +510,3 @@ def test_mcts_search_with_max_depth():
     visits3 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=0)
     action3 = max(visits3.items(), key=lambda kv: kv[1])[0]
     assert action3 in dp.legal_actions
-
-
-def test_color_prestige_computation():
-    """Test that PlayerState.color_prestige correctly computes color prestige."""
-    from splendor_duel_engine.engine.cards import Card
-    from splendor_duel_engine.engine.state import PurchasedCard
-
-    # Create a player with some purchased cards
-    player = PlayerState(
-        tokens=Tokens(),
-        bonus=Tokens(),
-        prestige=10,
-        crowns=2,
-        reserved=(),
-        purchased=(
-            PurchasedCard(
-                card=Card(
-                    id="WHITE-1",
-                    level=1,
-                    points=2,
-                    crowns=1,
-                    bonus=Color.WHITE,
-                    bonus_count=1,
-                    ability=None,
-                    is_multicolor=False,
-                    cost=Tokens(),
-                ),
-                chosen_color=None,
-            ),
-            PurchasedCard(
-                card=Card(
-                    id="WHITE-2",
-                    level=2,
-                    points=3,
-                    crowns=0,
-                    bonus=Color.WHITE,
-                    bonus_count=2,
-                    ability=None,
-                    is_multicolor=False,
-                    cost=Tokens(),
-                ),
-                chosen_color=None,
-            ),
-            PurchasedCard(
-                card=Card(
-                    id="BLUE-1",
-                    level=1,
-                    points=1,
-                    crowns=0,
-                    bonus=Color.BLUE,
-                    bonus_count=1,
-                    ability=None,
-                    is_multicolor=False,
-                    cost=Tokens(),
-                ),
-                chosen_color=None,
-            ),
-        ),
-        privileges=0,
-    )
-
-    # White prestige: (2 points + 1 bonus) + (3 points + 2 bonus) = 8
-    assert player.color_prestige(Color.WHITE) == 8
-    # Blue prestige: 1 point + 1 bonus = 2
-    assert player.color_prestige(Color.BLUE) == 2
-    # Other colors: 0
-    assert player.color_prestige(Color.GREEN) == 0
-    assert player.color_prestige(Color.RED) == 0
-    assert player.color_prestige(Color.BLACK) == 0
-
-
-def test_color_prestige_multicolor():
-    """Test that multicolor cards use chosen_color for color prestige."""
-    from splendor_duel_engine.engine.cards import Card
-    from splendor_duel_engine.engine.state import PurchasedCard
-
-    player = PlayerState(
-        tokens=Tokens(),
-        bonus=Tokens(),
-        prestige=5,
-        crowns=1,
-        reserved=(),
-        purchased=(
-            PurchasedCard(
-                card=Card(
-                    id="MULTI-1",
-                    level=2,
-                    points=4,
-                    crowns=1,
-                    bonus=None,
-                    bonus_count=2,
-                    ability=None,
-                    is_multicolor=True,
-                    cost=Tokens(),
-                ),
-                chosen_color=Color.RED,  # Player chose RED
-            ),
-        ),
-        privileges=0,
-    )
-
-    # Multicolor card with chosen_color=RED should count toward RED
-    # Points (4) + bonus_count (2) = 6
-    assert player.color_prestige(Color.RED) == 6
-    assert player.color_prestige(Color.WHITE) == 0

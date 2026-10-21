@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
+from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.actions import Action, apply, decide
 from splendor_duel_engine.engine.colors import GEM_COLORS
 from splendor_duel_engine.engine.observation import observation
@@ -180,7 +181,10 @@ def _heuristic_evaluation(state: GameState, perspective: int) -> float:
     # Single-color win proximity
     color_bonus = 0.0
     for color in GEM_COLORS:
-        color_bonus += (p.color_prestige(color) - opp.color_prestige(color)) * 0.1
+        color_bonus += (
+            helpers.color_points(p.purchased, color)
+            - helpers.color_points(opp.purchased, color)
+        ) * 0.1
 
     # Token advantage: gold is most valuable, then pearls, then gems
     token_diff = (p.tokens.gold - opp.tokens.gold) * 3.0
