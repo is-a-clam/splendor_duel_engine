@@ -83,10 +83,18 @@ def can_afford_card(card: Card, tokens: Tokens, bonus: Tokens) -> bool:
 def legal_payments(card: Card, tokens: Tokens, bonus: Tokens) -> list[Tokens]:
     """Enumerate legal payments for buying ``card``.
 
-    If the card is unaffordable, returns ``[]`` (so ``decide()`` and ``apply()``
-    agree: a payment is offered exactly when it would be accepted). Yields only
-    payments that use the minimum gold across all valid payments. Ordered as
-    white, blue, green, red, black, pearl loops in that order.
+    Returns every legal way to pay for ``card``. For each combination of
+    coloured tokens and pearls the player may spend, only the *minimum* gold
+    needed to cover that combination's shortfall is yielded: spending more gold
+    than the shortfall requires is never a legal payment, but paying a shortfall
+    in gold while holding matching coloured tokens is still yielded.
+
+    The result is empty exactly when :func:`can_afford_card` is false (so
+    ``decide()`` and ``apply()`` agree: a payment is offered exactly when it
+    would be accepted).
+
+    The enumeration order is the white, blue, green, red, black, pearl loop
+    order.
     """
     if not can_afford_card(card, tokens, bonus):
         return []
@@ -138,11 +146,7 @@ def legal_payments(card: Card, tokens: Tokens, bonus: Tokens) -> list[Tokens]:
         if key not in seen:
             seen.add(key)
             unique.append(payment)
-
-    if not unique:
-        return []
-    min_gold = min(p.gold for p in unique)
-    return [p for p in unique if p.gold == min_gold]
+    return unique
 
 
 def take_penalty(colors: Iterable[Color]) -> bool:

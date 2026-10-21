@@ -111,11 +111,12 @@ Semantics:
   spend is considered, bounded per colour by
   `min(tokens.count(colour), remaining.count(colour))`, where `remaining` is
   the cost after bonuses.
-- **Only minimum gold is yielded.** Each payment spends the minimum number of
-  gold tokens needed to cover the remaining shortfall of its coloured
-  combination, and only payments using the least gold of all the legal
-  combinations are returned — spending more gold than necessary is never
-  beneficial and would bloat the action space.
+- **Only the minimum gold needed for each combination is yielded.** For each
+  combination of coloured tokens and pearls the player can spend, the payment
+  uses the minimum number of gold tokens needed to cover that combination's
+  remaining shortfall. This is a *per-combination* minimum, not a global one:
+  a payment that spends fewer coloured tokens and covers the shortfall with
+  more gold is still a legal payment and is still yielded.
 - The result is ordered: the white, blue, green, red, black and pearl loops
   nest in that order, because `decide()` offers payments in that order.
 

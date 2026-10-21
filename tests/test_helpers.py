@@ -208,8 +208,26 @@ def test_can_afford_card_does_not_require_a_bonus_for_ordinary_cards():
 
 
 def test_legal_payments_yields_only_the_minimum_gold():
+    # The minimum gold is per combination of coloured tokens and pearls: each
+    # combination is yielded with the minimum gold needed for *that* combination.
     card = make_card(cost=Tokens(white=2))
-    assert legal_payments(card, Tokens(white=2, gold=3), Tokens()) == [Tokens(white=2)]
+    assert legal_payments(card, Tokens(white=2, gold=3), Tokens()) == [
+        Tokens(gold=2),
+        Tokens(white=1, gold=1),
+        Tokens(white=2),
+    ]
+
+
+def test_legal_payments_yields_payments_that_use_more_gold_than_the_cheapest():
+    # A payment that spends fewer coloured tokens and covers the shortfall with
+    # more gold is still legal, so it is still yielded: the enumeration is not
+    # filtered to the globally cheapest gold.
+    card = make_card(cost=Tokens(white=2))
+    payments = legal_payments(card, Tokens(white=2, gold=3), Tokens())
+    assert Tokens(gold=2) in payments
+    assert Tokens(white=2) in payments
+    assert min(p.gold for p in payments) == 0
+    assert max(p.gold for p in payments) == 2
 
 
 def test_legal_payments_covers_a_shortfall_with_gold():
