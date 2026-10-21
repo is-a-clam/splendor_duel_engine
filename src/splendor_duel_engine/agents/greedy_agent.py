@@ -146,10 +146,14 @@ class GreedyAgent:
         return legal_actions[0]
 
     def _choose_replenish(
-        self, obs: Observation, legal_actions: tuple[Action, ...]
+        self, _obs: Observation, legal_actions: tuple[Action, ...]
     ) -> Action:
-        # Never replenish voluntarily: decline whenever the engine offers
-        # DoneWithReplenish, and take the forced Replenish() otherwise.
+        """Never replenish voluntarily; take the forced ``Replenish()`` only.
+
+        ``_obs`` is unused: the decision depends solely on the offered actions.
+        The parameter stays so every phase handler shares the
+        ``(observation, legal_actions)`` dispatch signature.
+        """
         done = first_of(legal_actions, DoneWithReplenish)
         if done is not None:
             return done

@@ -115,6 +115,24 @@ def test_greedy_always_declines_a_voluntary_replenish():
     action = agent.choose_action(observation(base, 0), dp.legal_actions)
     assert isinstance(action, DoneWithReplenish)
 
+    # Blocked mandatory phase *and* a bag worth more than five tokens: the
+    # exact position where the old "blocked AND bag > 5" rule took a voluntary
+    # replenish. The table rule declines here and waits for the forced step.
+    empty_handed = replace(
+        base,
+        board=(None,) * 25,
+        players=(replace(base.players[0], tokens=Tokens()), base.players[1]),
+    )
+    # Precondition: MANDATORY really is blocked -- no take line, no gold on the
+    # board to reserve, and nothing in the pyramid affordable with an empty hand.
+    mandatory = decide(replace(empty_handed, phase=Phase.MANDATORY))
+    assert [type(a) for a in mandatory.legal_actions] == [Replenish]
+    dp = decide(empty_handed)
+    assert any(isinstance(a, Replenish) for a in dp.legal_actions)
+    assert any(isinstance(a, DoneWithReplenish) for a in dp.legal_actions)
+    action = agent.choose_action(observation(empty_handed, 0), dp.legal_actions)
+    assert isinstance(action, DoneWithReplenish)
+
     # Forced: MANDATORY would have no legal action, so the engine offers
     # Replenish() alone and the agent must take it.
     blocked = replace(base, phase=Phase.MANDATORY, board=(None,) * 25)
