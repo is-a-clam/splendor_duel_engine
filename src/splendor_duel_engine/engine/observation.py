@@ -36,7 +36,13 @@ class PlayerView:
 
 @dataclass(frozen=True, slots=True)
 class Observation:
-    """Observation of game state from a player's perspective."""
+    """Observation of the game from the active player's perspective.
+
+    **Invariant:** an observation handed to an agent is always taken from the
+    active player's perspective — `you` is the player to move, and
+    `current_player` is that player's seat index. There is no separate observer
+    field, because an agent only ever observes the position it must act on.
+    """
 
     you: PlayerView
     opponent: PlayerView
@@ -59,7 +65,11 @@ class Observation:
 
 
 def observation(state: GameState, player: int) -> Observation:
-    """Create an observation of the state from the given player's perspective."""
+    """Create an observation of the state from the given player's perspective.
+
+    Production callers pass `state.current_player`; the function accepts any
+    seat so that tests can inspect a position from either side.
+    """
     if player not in (0, 1):
         raise ValueError("player must be 0 or 1")
 
