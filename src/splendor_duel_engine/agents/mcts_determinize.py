@@ -6,14 +6,8 @@ import random
 from collections import defaultdict
 
 from splendor_duel_engine.engine.cards import Card, load_cards
-from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.observation import Observation, PlayerView
 from splendor_duel_engine.engine.state import GameState, PlayerState, ReservedCard
-
-# Constants from engine: fixed census per rules
-GOLD_TOTAL = 3
-PEARL_TOTAL = 2
-GEM_TOTAL = 4  # 4 each of 5 gem colors
 
 # Total cards per level (from rules)
 TOTAL_PER_LEVEL = {1: 30, 2: 24, 3: 13}
@@ -24,13 +18,15 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
 
     Samples: deck order, opponent face-down reserved cards, RNG seed.
     Preserves: all public info (board, pyramids, royals, both players' public state).
-    Bag composition is public by deduction (fixed census minus all public tokens).
+    The bag is copied verbatim from the observation (the observation's bag is the
+    engine's own bag, so the determinized state is consistent with it by
+    construction).
     Replenish and other randomness use the state's RNG — engine.apply deep-copies
     it before mutating, so multiple tree branches from the same root see the same
     replenish outcome.
     """
-    # --- Compute exact bag multiset (public deduction) ---
-    bag_multiset = _compute_bag_multiset(observation)
+    # --- Copy the bag from the observation (it is the engine's own bag) ---
+    bag_multiset = observation.bag
 
     # --- Build remaining pools and partition into decks + opponent hidden reserves ---
     pools = _build_remaining_pools(observation)
@@ -196,56 +192,6 @@ def _partition_pools(
 
     # Return decks in GameState order: (level3, level2, level1)
     return ({3: decks[3], 2: decks[2], 1: decks[1]}, opp_reserved)
-
-
-def _compute_bag_multiset(obs: Observation) -> Tokens:
-    """
-    Compute exact bag contents: fixed census minus all public physical tokens.
-    This is public knowledge — no sampling.
-
-    Physical tokens are ONLY: board + player 0 hand + player 1 hand.
-    Card bonuses (purchased, reserved) are purchasing power, not physical tokens.
-    """
-    totals = {
-        Color.GOLD: GOLD_TOTAL,
-        Color.PEARL: PEARL_TOTAL,
-        Color.BLUE: GEM_TOTAL,
-        Color.WHITE: GEM_TOTAL,
-        Color.GREEN: GEM_TOTAL,
-        Color.BLACK: GEM_TOTAL,
-        Color.RED: GEM_TOTAL,
-    }
-
-    known = _count_public_physical_tokens(obs)
-
-    counts: dict[str, int] = {}
-    for color, total in totals.items():
-        count = total - known.get(color, 0)
-        assert count >= 0, f"Negative count for {color}: {count}"
-        if count > 0:
-            counts[color.value] = count
-
-    return Tokens(**counts)
-
-
-def _count_public_physical_tokens(obs: Observation) -> dict[Color, int]:
-    """Sum all physical tokens visible in the observation (board + both players' hands)."""
-    counts: dict[Color, int] = defaultdict(int)
-    # Board tokens (obs.board is tuple[Color | None, ...])
-    for color in obs.board:
-        if color is not None:
-            counts[color] += 1
-    # Player 0 (you) tokens
-    for color in Color:
-        count = obs.you.tokens.count(color)
-        if count:
-            counts[color] += count
-    # Player 1 (opponent) tokens
-    for color in Color:
-        count = obs.opponent.tokens.count(color)
-        if count:
-            counts[color] += count
-    return counts
 
 
 def _build_player_state(

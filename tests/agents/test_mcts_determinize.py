@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import random
-from collections import defaultdict
 
 from splendor_duel_engine.agents.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import (
@@ -15,7 +14,7 @@ from splendor_duel_engine.engine.actions import (
     TakeTokens,
     apply,
 )
-from splendor_duel_engine.engine.colors import Color, Tokens
+from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import new_game
@@ -232,25 +231,11 @@ def test_determinize_samples_deck_order():
     assert det1.decks != det2.decks
 
 
-def test_determinize_bag_multiset_exact():
-    rng = random.Random(42)
+def test_determinize_copies_the_observation_bag():
     state = new_game(0)
     obs = observation(state, 0)
-    det = determinize(obs, rng)
-    # Bag multiset is EXACTLY the fixed census minus all public physical tokens
-    expected_bag = _compute_exact_bag_multiset(
-        obs
-    )  # helper using same logic as _compute_bag_multiset
-    assert det.bag == expected_bag
-
-
-def test_determinize_bag_matches_state_bag_midgame():
-    """Bag computation must match engine's state.bag in mid-game with purchases."""
-    state = _make_midgame_state_with_purchases()
-    obs = observation(state, 0)
     det = determinize(obs, random.Random(42))
-    # The determinized bag must exactly match the engine's bag (both compute census - board - hands)
-    assert det.bag == state.bag, f"Determinized bag {det.bag} != engine bag {state.bag}"
+    assert det.bag == obs.bag
 
 
 def test_determinize_your_reserved_deck_excluded_from_decks():
@@ -330,52 +315,6 @@ def test_determinize_replenish_deterministic_per_root():
     )
     # Both should differ from root RNG
     assert result1.rng.getstate() != det.rng.getstate()
-
-
-def _compute_exact_bag_multiset(obs: Observation) -> Tokens:
-    """Helper that computes the exact bag multiset from public physical tokens only."""
-    # Fixed census per rules
-    totals = {
-        Color.GOLD: 3,
-        Color.PEARL: 2,
-        Color.BLUE: 4,
-        Color.WHITE: 4,
-        Color.GREEN: 4,
-        Color.BLACK: 4,
-        Color.RED: 4,
-    }
-
-    known: dict[Color, int] = defaultdict(int)
-
-    # Board tokens (obs.board is tuple[Color | None, ...])
-    for color in obs.board:
-        if color is not None:
-            known[color] += 1
-
-    # Player 0 (you) tokens
-    for color in Color:
-        count = obs.you.tokens.count(color)
-        if count:
-            known[color] += count
-
-    # Player 1 (opponent) tokens
-    for color in Color:
-        count = obs.opponent.tokens.count(color)
-        if count:
-            known[color] += count
-
-    # NOTE: Purchased card bonuses and reserved card bonuses are NOT physical tokens.
-    # They are permanent purchasing power discounts. The bag census (25 tokens)
-    # only tracks physical tokens: board + hands + bag.
-
-    counts = {}
-    for color, total in totals.items():
-        count = total - known.get(color, 0)
-        assert count >= 0, f"Negative count for {color}: {count}"
-        if count > 0:
-            counts[color.value] = count
-
-    return Tokens(**counts)
 
 
 def test_determinize_invariant_check():
