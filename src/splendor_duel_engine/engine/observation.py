@@ -8,11 +8,16 @@ card identities from opponents, deck order).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine.cards import Card, RoyalCard
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, PurchasedCard
+
+if TYPE_CHECKING:
+    from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
+    from splendor_duel_engine.engine.cards import Ability
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +50,12 @@ class Observation:
     winner: int | None
     your_reserved_deck: tuple[Card, ...]  # own hidden deck reservations
     phase: Phase
+    # Pending action fields for sub-decision phases
+    pending_buy: BuyCard | None = None
+    pending_reserve: ReserveCard | None = None
+    pending_ability: Ability | None = None
+    pending_royal: bool = False
+    extra_turn: bool = False
 
 
 def observation(state: GameState, player: int) -> Observation:
@@ -96,4 +107,9 @@ def observation(state: GameState, player: int) -> Observation:
         winner=state.winner,
         your_reserved_deck=your_reserved_deck,
         phase=state.phase,
+        pending_buy=state.pending_buy,
+        pending_reserve=state.pending_reserve,
+        pending_ability=state.pending_ability,
+        pending_royal=state.pending_royal,
+        extra_turn=state.extra_turn,
     )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from splendor_duel_engine.agents.mcts_agent import MCTSAgent
 from splendor_duel_engine.engine.actions import decide
 from splendor_duel_engine.engine.observation import observation
@@ -107,3 +109,42 @@ def test_mcts_agent_invalid_playout_policy():
         assert False, "Expected ValueError for invalid playout_policy"
     except ValueError as e:
         assert "playout_policy" in str(e).lower()
+
+
+def test_mcts_agent_runs_mcts_for_non_mandatory_phases():
+    """Verify MCTS is invoked for non-MANDATORY phases with multiple legal actions."""
+    from splendor_duel_engine.engine.actions import ReserveCard, apply
+    from splendor_duel_engine.engine.phase import Phase
+
+    # Create a state where the player can reserve a card (enters CHOOSE_GOLD phase)
+    state = new_game(0)
+    # Advance to MANDATORY
+    from splendor_duel_engine.engine.actions import (
+        DoneWithPrivileges,
+        DoneWithReplenish,
+    )
+
+    state = new_game(0)
+    state = apply(state, DoneWithPrivileges())
+    state = apply(state, DoneWithReplenish())
+    # Now in MANDATORY, reserve from pyramid
+    dp = decide(state)
+    reserve_action = None
+    for action in dp.legal_actions:
+        if isinstance(action, ReserveCard) and action.source.startswith("pyramid"):
+            reserve_action = action
+            break
+    assert reserve_action is not None, "No pyramid reserve action available"
+    state = apply(state, reserve_action)
+    assert state.phase == Phase.CHOOSE_GOLD
+    obs = observation(state, state.current_player)
+    dp = decide(state)
+    assert len(dp.legal_actions) > 1, "Should have multiple gold tokens to choose from"
+
+    # Mock mcts_search to verify it's called
+    with patch("splendor_duel_engine.agents.mcts_agent.mcts_search") as mock_search:
+        mock_search.return_value = dp.legal_actions[0]
+        agent = MCTSAgent(seed=42, max_playouts=100)
+        action = agent.choose_action(obs, dp.legal_actions)
+        mock_search.assert_called_once()
+        assert action in dp.legal_actions

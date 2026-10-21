@@ -75,11 +75,11 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
         phase=observation.phase,
         winner=observation.winner,
         privileges_supply=observation.privileges_supply,
-        extra_turn=False,
-        pending_buy=None,
-        pending_reserve=None,
-        pending_ability=None,
-        pending_royal=False,
+        extra_turn=observation.extra_turn,
+        pending_buy=observation.pending_buy,
+        pending_reserve=observation.pending_reserve,
+        pending_ability=observation.pending_ability,
+        pending_royal=observation.pending_royal,
         rng=det_rng,
     )
 

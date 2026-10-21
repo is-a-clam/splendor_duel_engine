@@ -5,13 +5,10 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.mcts_core import mcts_search
 from splendor_duel_engine.agents.mcts_determinize import determinize
-from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.engine.actions import Action
 from splendor_duel_engine.engine.observation import Observation
-from splendor_duel_engine.engine.phase import Phase
 
 if TYPE_CHECKING:
     from splendor_duel_engine.engine.observation import Observation
@@ -22,7 +19,7 @@ class MCTSAgent:
 
     Uses determinized MCTS: samples hidden information from the observation
     to create a fully-determined GameState, then runs UCT search with playouts.
-    For sub-decision phases (non-MANDATORY), falls back to the playout policy agent.
+    Runs MCTS for any decision point with multiple legal actions.
     """
 
     def __init__(
@@ -50,30 +47,26 @@ class MCTSAgent:
         self._max_playouts = max_playouts
         self._exploration = exploration
         self._playout_policy = playout_policy
-        # Fallback agent for sub-decision phases
-        self._fallback_agent = (
-            GreedyAgent() if playout_policy == "greedy" else RandomAgent(seed=seed)
-        )
 
     def choose_action(
         self, observation: Observation, legal_actions: tuple[Action, ...]
     ) -> Action:
         """Choose an action using MCTS from the given observation.
 
-        For the MANDATORY phase (main decisions), runs full MCTS search.
-        For sub-decision phases (USE_PRIVILEGES, REPLENISH, CHOOSE_GOLD, etc.),
-        falls back to the playout policy agent.
+        Runs MCTS for any decision point with multiple legal actions.
+        Early-returns the only legal action for forced moves.
 
         Args:
             observation: Partial observation from the player's perspective.
             legal_actions: Legal actions at this decision point.
 
         Returns:
-            The action with the highest visit count from MCTS root, or fallback choice.
+            The action with the highest visit count from MCTS root,
+            or the single legal action for forced moves.
         """
-        # For non-MANDATORY phases, use fallback policy (sub-decisions are typically simple/forced)
-        if observation.phase != Phase.MANDATORY:
-            return self._fallback_agent.choose_action(observation, legal_actions)
+        # Fast path: forced moves (only 1 legal action)
+        if len(legal_actions) == 1:
+            return legal_actions[0]
 
         # Determinize the observation into a full GameState
         det_state = determinize(observation, self._rng)
