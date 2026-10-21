@@ -175,10 +175,12 @@ def test_mcts_search_returns_legal_action():
     state = _advance_to_mandatory(new_game(0))
     obs = observation(state, 0)
     det_state = determinize(obs, random.Random(0))
-    action = mcts_search(det_state, random.Random(0), max_playouts=100)
+    visits = mcts_search(det_state, random.Random(0), max_playouts=100)
     # Action must be legal in the original state
     dp = decide(state)
-    assert action in dp.legal_actions
+    # Get the most-visited action
+    best_action = max(visits.items(), key=lambda kv: kv[1])[0]
+    assert best_action in dp.legal_actions
 
 
 def test_mcts_search_deterministic_with_same_seed():
@@ -205,9 +207,10 @@ def test_mcts_search_with_greedy_policy():
     state = _advance_to_mandatory(new_game(0))
     obs = observation(state, 0)
     det_state = determinize(obs, random.Random(0))
-    action = mcts_search(
+    visits = mcts_search(
         det_state, random.Random(0), max_playouts=50, playout_policy="greedy"
     )
+    action = max(visits.items(), key=lambda kv: kv[1])[0]
     dp = decide(state)
     assert action in dp.legal_actions
 
@@ -494,16 +497,19 @@ def test_mcts_search_with_max_depth():
     det_state = determinize(obs, random.Random(0))
 
     # Should work with default max_depth
-    action1 = mcts_search(det_state, random.Random(0), max_playouts=20)
+    visits1 = mcts_search(det_state, random.Random(0), max_playouts=20)
+    action1 = max(visits1.items(), key=lambda kv: kv[1])[0]
     dp = decide(state)
     assert action1 in dp.legal_actions
 
     # Should work with custom max_depth
-    action2 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=5)
+    visits2 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=5)
+    action2 = max(visits2.items(), key=lambda kv: kv[1])[0]
     assert action2 in dp.legal_actions
 
     # Should work with max_depth=0 (pure heuristic)
-    action3 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=0)
+    visits3 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=0)
+    action3 = max(visits3.items(), key=lambda kv: kv[1])[0]
     assert action3 in dp.legal_actions
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from splendor_duel_engine.engine.actions import (
     Action,
@@ -70,10 +70,12 @@ class GreedyAgent:
     def __init__(self, seed: int | None = None) -> None:
         self._rng = random.Random(seed) if seed is not None else None
 
-    def _maybe_shuffle(self, actions: list[Action]) -> list[Action]:
+    T = TypeVar("T", bound=Action)
+
+    def _maybe_shuffle(self, actions: list[T]) -> list[T]:
         """Shuffle actions if RNG is available, for stochastic tie-breaking."""
         if self._rng is not None and len(actions) > 1:
-            self._rng.shuffle(actions)
+            self._rng.shuffle(list(actions))
         return actions
 
     def choose_action(

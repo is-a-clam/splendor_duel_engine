@@ -295,11 +295,11 @@ def mcts_search(
     exploration: float = 1.414,
     playout_policy: str = "greedy",
     max_depth: int = 15,
-) -> Action:
-    """Run MCTS search and return the most-visited action.
+) -> dict[Action, int]:
+    """Run MCTS search and return visit counts for each legal action.
 
     Builds a tree from the determinized root state, runs the specified number
-    of playouts, and returns the action with the highest visit count at the root.
+    of playouts, and returns a mapping from each legal action to its visit count.
 
     The tree is discarded after each call (no memory leak across decisions).
 
@@ -312,7 +312,8 @@ def mcts_search(
         max_depth: Maximum plies per playout before heuristic evaluation (default 15).
 
     Returns:
-        The action with the most visits from the root.
+        Mapping from each legal action to its visit count.
+        Actions not expanded will have 0 visits.
     """
     # Handle terminal root state
     if root_state.winner is not None:
@@ -344,13 +345,11 @@ def mcts_search(
             # If somehow reached (e.g., logic bug), treat as a draw to avoid
             # corrupting the tree with arbitrary values.
             backpropagate(node, 0.5)
-    # Return most-visited action
-    if not root.children:
-        # No playouts completed (e.g., max_playouts=0 or all led to terminal immediately)
-        # Fall back to a legal action
-        legal = decide(root_state).legal_actions
-        if legal:
-            return legal[0]
-        raise ValueError("no legal actions in root state")
-    best_action = max(root.children.items(), key=lambda kv: kv[1].visits)[0]
-    return best_action
+
+    # Return visit counts for all legal actions (0 if never expanded)
+    legal_actions = decide(root_state).legal_actions
+    visits: dict[Action, int] = {}
+    for action in legal_actions:
+        child = root.children.get(action)
+        visits[action] = child.visits if child else 0
+    return visits
