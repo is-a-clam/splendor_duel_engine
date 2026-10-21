@@ -25,8 +25,6 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
     it before mutating, so multiple tree branches from the same root see the same
     replenish outcome.
     """
-    # --- Copy the bag from the observation (it is the engine's own bag) ---
-    bag_multiset = observation.bag
 
     # --- Build remaining pools and partition into decks + opponent hidden reserves ---
     pools = _build_remaining_pools(observation)
@@ -63,7 +61,7 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
     return GameState(
         players=(player0, player1),
         board=observation.board,
-        bag=bag_multiset,
+        bag=observation.bag,
         decks=decks,
         pyramid=observation.pyramid,
         royals_available=observation.royals_available,

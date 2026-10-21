@@ -73,7 +73,7 @@ class GreedyAgent:
     def _maybe_shuffle(self, actions: list[T]) -> list[T]:
         """Shuffle actions if RNG is available, for stochastic tie-breaking."""
         if self._rng is not None and len(actions) > 1:
-            self._rng.shuffle(list(actions))
+            self._rng.shuffle(actions)
         return actions
 
     def choose_action(
@@ -290,7 +290,7 @@ class GreedyAgent:
         )
         # Gold is wild and never a card cost, so it is never "needed" as a
         # color; pearls are never reduced by bonuses. One entry per missing
-        # token: the discard scoring counts this multiset.
+        # token: the discard scoring counts this set.
         deficits = helpers.cost_deficits(best.cost, obs.you.bonus, obs.you.tokens)
         nets = sorted(
             (-count, colour.value, colour) for colour, count in deficits.items()
@@ -343,7 +343,11 @@ class GreedyAgent:
         needed = set(self._colors_needed_for_best_purchase(obs))
 
         def score(action: TakeTokens) -> tuple[int, tuple[int, ...]]:
-            colors = [obs.board[index] for index in action.line]
+            colors = [
+                color
+                for index in action.line
+                if (color := obs.board[index]) is not None
+            ]
             penalty = _PENALTY_COST if helpers.take_penalty(colors) else 0
             needed_bonus = _NEEDED_COLOR_BONUS * sum(1 for c in colors if c in needed)
             total = len(colors) * _TOKEN_WEIGHT + needed_bonus - penalty
