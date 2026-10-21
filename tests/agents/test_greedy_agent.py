@@ -165,8 +165,11 @@ def test_needed_colours_repeat_once_per_missing_token():
 
 
 def test_greedy_buys_the_first_maximum_value_visible_card():
-    # `visible_cards` order is part of the contract: the agent breaks ties by
-    # the first maximum, so an earlier equal-value card wins.
+    # Pins the *engine's* legal-action order: `_choose_mandatory` takes the
+    # first maximum among the BuyCard actions `decide()` offers, so an earlier
+    # equal-value card wins. Order of `helpers.visible_cards` is a different
+    # contract, pinned in
+    # test_needed_colours_follow_the_visible_cards_contract_order below.
     agent = GreedyAgent()
     first = Card(
         id="A",
@@ -203,6 +206,55 @@ def test_greedy_buys_the_first_maximum_value_visible_card():
     action = agent.choose_action(observation(st, 0), dp.legal_actions)
     assert isinstance(action, BuyCard)
     assert action.card.id == "A"
+
+
+def test_needed_colours_follow_the_visible_cards_contract_order():
+    # The order-sensitive consumer of `visible_cards` is the needed-colour
+    # lookup: it picks the best affordable card with max(), which returns the
+    # first maximum, and that card's deficits become the multiset that drives
+    # the take-action scoring. Two equally valuable cards with different costs
+    # therefore flip the multiset when the helper's order changes.
+    agent = GreedyAgent()
+    white_card = Card(
+        id="W3",
+        level=1,
+        points=3,
+        crowns=0,
+        bonus=Color.WHITE,
+        bonus_count=1,
+        ability=None,
+        is_multicolor=False,
+        cost=Tokens(white=3),
+    )
+    blue_card = Card(
+        id="B3",
+        level=1,
+        points=3,
+        crowns=0,
+        bonus=Color.BLUE,
+        bonus_count=1,
+        ability=None,
+        is_multicolor=False,
+        cost=Tokens(blue=3),
+    )
+    base = board_state(current_player=0, phase=Phase.MANDATORY)
+    # Both cards are affordable (two white / three blue, covered by five gold)
+    # and equal in value (points*2 + crowns), so the first in helper order wins.
+    hand = Tokens(white=1, gold=5)
+
+    def needed(row: tuple[Card | None, ...]) -> list[Color]:
+        st = replace(
+            base,
+            players=(
+                replace(base.players[0], tokens=hand, bonus=Tokens()),
+                base.players[1],
+            ),
+            pyramid=(row, (None,) * 4, (None,) * 5),
+        )
+        return agent._colors_needed_for_best_purchase(observation(st, 0))
+
+    assert needed((white_card, blue_card, None)) == [Color.WHITE, Color.WHITE]
+    assert needed((blue_card, white_card, None)) == [Color.BLUE] * 3
 
 
 def test_greedy_prefers_buying_high_value_affordable_card():

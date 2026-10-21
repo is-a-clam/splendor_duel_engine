@@ -300,12 +300,16 @@ class GreedyAgent:
             needed.extend([colour] * -neg_count)
         return needed
 
+    def _visible_cards(self, obs: Observation) -> list[Card]:
+        """The cards this player may buy, in the helper's contract order."""
+        return helpers.visible_cards(
+            obs.pyramid, obs.you.reserved_public, obs.your_reserved_deck
+        )
+
     def _get_affordable_cards(self, obs: Observation) -> list[Card]:
         return [
             card
-            for card in helpers.visible_cards(
-                obs.pyramid, obs.you.reserved_public, obs.your_reserved_deck
-            )
+            for card in self._visible_cards(obs)
             if helpers.can_afford_card(card, obs.you.tokens, obs.you.bonus)
         ]
 
@@ -330,9 +334,7 @@ class GreedyAgent:
         return any(
             card.points > _HIGH_VALUE_POINTS
             and helpers.can_afford_card(card, hand, obs.you.bonus)
-            for card in helpers.visible_cards(
-                obs.pyramid, obs.you.reserved_public, obs.your_reserved_deck
-            )
+            for card in self._visible_cards(obs)
         )
 
     def _best_take_action(
