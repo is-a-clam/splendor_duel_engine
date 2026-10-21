@@ -95,13 +95,15 @@ def expand(node: MCTSNode, rng: random.Random) -> MCTSNode:
     If untried_actions is None or empty, it is populated from the current state's legal
     actions. An action is chosen randomly from untried_actions, removed from the
     list, applied to the state, and a new child node is created and registered.
+    Then, if the child has only one legal action (forced move), recursively expand
+    through the chain of forced moves to skip deterministic transitions.
 
     Args:
         node: The node to expand.
         rng: Random number generator for action selection.
 
     Returns:
-        The newly created child node.
+        The leaf node after auto-expanding through any forced moves.
     """
     if node.untried_actions is None or not node.untried_actions:
         node.untried_actions = list(decide(node.state).legal_actions)
@@ -110,7 +112,38 @@ def expand(node: MCTSNode, rng: random.Random) -> MCTSNode:
     new_state = apply(node.state, action)
     child = MCTSNode(state=new_state, parent=node, action=action)
     node.children[action] = child
-    return child
+
+    return _auto_expand_forced_moves(child)
+
+
+def _auto_expand_forced_moves(node: MCTSNode) -> MCTSNode:
+    """Recursively expand through forced moves (nodes with exactly one legal action).
+
+    Many game phases have exactly one legal action (e.g., USE_PRIVILEGES -> DONE_WITH_PRIVILEGES
+    -> REPLENISH -> DONE_WITH_REPLENISH -> MANDATORY). This function skips these
+    deterministic chains so playouts start at actual decision points.
+
+    Note: Even if the forced move is stochastic (e.g., REPLENISH draws random tokens),
+    the child's state.rng is already advanced by apply(), so the single child correctly
+    captures that randomness. The auto-expansion just skips the "choice" of which forced
+    action to take (there's only one).
+
+    Args:
+        node: The node to start auto-expanding from.
+
+    Returns:
+        The leaf node after expanding through all forced moves.
+    """
+    while not node.is_terminal():
+        dp = decide(node.state)
+        if len(dp.legal_actions) != 1:
+            break
+        action = dp.legal_actions[0]
+        new_state = apply(node.state, action)
+        child = MCTSNode(state=new_state, parent=node, action=action)
+        node.children[action] = child
+        node = child
+    return node
 
 
 def playout(

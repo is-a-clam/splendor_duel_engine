@@ -227,6 +227,42 @@ def test_mcts_node_is_fully_expanded():
     assert node.is_fully_expanded()
 
 
+def test_expand_auto_expands_forced_moves():
+    """Test that expand auto-expands through forced move chains.
+
+    From the initial state, expanding should skip the forced phases
+    (USE_PRIVILEGES -> DONE_WITH_PRIVILEGES -> REPLENISH -> DONE_WITH_REPLENISH)
+    and create children at the MANDATORY phase where real decisions happen.
+    """
+    state = new_game(0)
+    root = MCTSNode(state=state, parent=None, action=None)
+
+    # Initial state is USE_PRIVILEGES with only one legal action: DoneWithPrivileges
+    dp = decide(state)
+    assert len(dp.legal_actions) == 1
+    assert isinstance(dp.legal_actions[0], DoneWithPrivileges)
+
+    # Expand once
+    child = expand(root, random.Random(0))
+
+    # The child should be at MANDATORY phase (after auto-expanding through
+    # USE_PRIVILEGES -> DONE_WITH_PRIVILEGES -> REPLENISH -> DONE_WITH_REPLENISH)
+    from splendor_duel_engine.engine.phase import Phase
+
+    assert child.state.phase == Phase.MANDATORY, (
+        f"Expected MANDATORY phase after auto-expand, got {child.state.phase}"
+    )
+
+    # The root should have exactly one child (the forced move chain was auto-expanded)
+    assert len(root.children) == 1
+
+    # The child should have multiple legal actions (actual decisions at MANDATORY)
+    child_dp = decide(child.state)
+    assert len(child_dp.legal_actions) > 1, (
+        f"Expected multiple legal actions at MANDATORY, got {len(child_dp.legal_actions)}"
+    )
+
+
 def test_playout_from_near_terminal_state():
     """Playout from a state one move from game end should terminate quickly with correct winner.
 
