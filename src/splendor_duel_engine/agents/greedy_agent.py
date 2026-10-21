@@ -13,6 +13,8 @@ import random
 from collections import Counter
 from typing import TYPE_CHECKING, TypeVar
 
+from splendor_duel_engine.agents.base import first_of
+from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.actions import (
     Action,
     BuyCard,
@@ -30,7 +32,7 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.cards import Ability
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
-from splendor_duel_engine.engine.observation import Observation, PlayerView
+from splendor_duel_engine.engine.observation import Observation
 
 if TYPE_CHECKING:
     from splendor_duel_engine.engine.cards import Card
@@ -44,10 +46,6 @@ _NEEDED_COLOR_BONUS = 2
 _HIGH_VALUE_POINTS = 4
 #: Cost of taking a penalty line (3 same-color tokens or 2+ pearls).
 _PENALTY_COST = 10
-#: Replenish only when forced *and* the bag holds more than this many tokens.
-_REPLENISH_MIN_BAG = 5
-#: Maximum number of cards a player may reserve.
-_MAX_RESERVED = 3
 #: Abilities that make a visible card worth reserving blindly for.
 _GOOD_ABILITIES = frozenset({Ability.EXTRA_TURN, Ability.PRIVILEGE})
 #: Royal pick priority: extra turn > privilege > steal token > plain 3pt.
@@ -88,6 +86,8 @@ class GreedyAgent:
         """
         if not legal_actions:
             raise ValueError("no legal actions offered")
+        if len(legal_actions) == 1:
+            return legal_actions[0]
 
         action_type = type(legal_actions[0])
 
@@ -140,27 +140,20 @@ class GreedyAgent:
                         return action
 
         # No useful color to take.
-        return next(
-            (a for a in legal_actions if isinstance(a, DoneWithPrivileges)),
-            legal_actions[0],
-        )
+        done = first_of(legal_actions, DoneWithPrivileges)
+        if done is not None:
+            return done
+        return legal_actions[0]
 
     def _choose_replenish(
         self, obs: Observation, legal_actions: tuple[Action, ...]
     ) -> Action:
-        replenish = next((a for a in legal_actions if isinstance(a, Replenish)), None)
-        if replenish is None:
-            return legal_actions[0]
-        done = next(
-            (a for a in legal_actions if isinstance(a, DoneWithReplenish)), None
-        )
-        if done is None:
-            return replenish  # forced: the engine offers no alternative
-        # Only replenish when forced AND the bag is worth the opponent's
-        # privilege (more than 5 tokens).
-        if obs.bag.total() > _REPLENISH_MIN_BAG and self._mandatory_is_blocked(obs):
-            return replenish
-        return done
+        # Never replenish voluntarily: decline whenever the engine offers
+        # DoneWithReplenish, and take the forced Replenish() otherwise.
+        done = first_of(legal_actions, DoneWithReplenish)
+        if done is not None:
+            return done
+        return legal_actions[0]
 
     def _choose_mandatory(
         self, obs: Observation, legal_actions: tuple[Action, ...]
@@ -213,7 +206,7 @@ class GreedyAgent:
         offered = [a.color for a in color_actions]
         best_bonus = max(obs.you.bonus.count(c) for c in offered)
         tied = [c for c in offered if obs.you.bonus.count(c) == best_bonus]
-        best = max(tied, key=lambda c: self._color_prestige(obs.you, c))
+        best = max(tied, key=lambda c: helpers.color_points(obs.you.purchased, c))
         for action in color_actions:
             if action.color is best:
                 return action
@@ -285,63 +278,32 @@ class GreedyAgent:
         Reads only public information: the pyramid and the player's own
         reserved cards (public + own deck reservations).
         """
-        affordable = [
-            card
-            for card in self._get_visible_cards(obs)
-            if self._can_afford(card, obs.you.tokens, obs.you.bonus)
-        ]
+        affordable = self._get_affordable_cards(obs)
         if not affordable:
             return []
         best = max(
             affordable, key=lambda card: card.points * _VALUE_WEIGHT + card.crowns
         )
         # Gold is wild and never a card cost, so it is never "needed" as a
-        # color; pearls are never reduced by bonuses.
-        nets: list[tuple[int, str, Color]] = []
-        for color in (*GEM_COLORS, Color.PEARL):
-            net = best.cost.count(color) - obs.you.tokens.count(color)
-            if color in GEM_COLORS:
-                net -= obs.you.bonus.count(color)
-            if net > 0:
-                nets.append((-net, color.value, color))
-        nets.sort()
+        # color; pearls are never reduced by bonuses. One entry per missing
+        # token: the discard scoring counts this multiset.
+        deficits = helpers.cost_deficits(best.cost, obs.you.bonus, obs.you.tokens)
+        nets = sorted(
+            (-count, colour.value, colour) for colour, count in deficits.items()
+        )
         needed: list[Color] = []
-        for neg_net, _, color in nets:
-            needed.extend([color] * -neg_net)
+        for neg_count, _, colour in nets:
+            needed.extend([colour] * -neg_count)
         return needed
-
-    def _get_visible_cards(self, obs: Observation) -> list[Card]:
-        """Cards the current player may buy: pyramid + own reserved cards."""
-        cards: list[Card] = [
-            card for row in obs.pyramid for card in row if card is not None
-        ]
-        cards.extend(obs.you.reserved_public)
-        cards.extend(obs.your_reserved_deck)
-        return cards
 
     def _get_affordable_cards(self, obs: Observation) -> list[Card]:
         return [
             card
-            for card in self._get_visible_cards(obs)
-            if self._can_afford(card, obs.you.tokens, obs.you.bonus)
+            for card in helpers.visible_cards(
+                obs.pyramid, obs.you.reserved_public, obs.your_reserved_deck
+            )
+            if helpers.can_afford_card(card, obs.you.tokens, obs.you.bonus)
         ]
-
-    @staticmethod
-    def _can_afford(card: Card, tokens: Tokens, bonus: Tokens) -> bool:
-        """Whether ``tokens`` (+ gold as wild) covers the card's cost.
-
-        Mirrors the engine's affordability rules: per-gem bonuses reduce the
-        cost (min 0), pearls are never reduced, gold is wild, and a
-        multicolor card requires at least one colored bonus.
-        """
-        if card.is_multicolor and not any(bonus.count(c) > 0 for c in GEM_COLORS):
-            return False
-        deficit = sum(
-            max(0, card.cost.count(c) - bonus.count(c) - tokens.count(c))
-            for c in GEM_COLORS
-        )
-        deficit += max(0, card.cost.pearl - tokens.pearl)
-        return deficit <= tokens.gold
 
     def _best_buy_action(self, buy_actions: list[BuyCard]) -> BuyCard:
         # Highest points x2 + crowns.
@@ -363,8 +325,10 @@ class GreedyAgent:
                 hand = hand + Tokens(**{color.value: 1})
         return any(
             card.points > _HIGH_VALUE_POINTS
-            and self._can_afford(card, hand, obs.you.bonus)
-            for card in self._get_visible_cards(obs)
+            and helpers.can_afford_card(card, hand, obs.you.bonus)
+            for card in helpers.visible_cards(
+                obs.pyramid, obs.you.reserved_public, obs.your_reserved_deck
+            )
         )
 
     def _best_take_action(
@@ -374,10 +338,7 @@ class GreedyAgent:
 
         def score(action: TakeTokens) -> tuple[int, tuple[int, ...]]:
             colors = [obs.board[index] for index in action.line]
-            counts = Counter(colors)
-            penalty = 0
-            if any(n >= 3 for n in counts.values()) or counts.get(Color.PEARL, 0) >= 2:
-                penalty = _PENALTY_COST
+            penalty = _PENALTY_COST if helpers.take_penalty(colors) else 0
             needed_bonus = _NEEDED_COLOR_BONUS * sum(1 for c in colors if c in needed)
             total = len(colors) * _TOKEN_WEIGHT + needed_bonus - penalty
             return (total, action.line)
@@ -386,9 +347,7 @@ class GreedyAgent:
 
     def _should_reserve(self, obs: Observation) -> bool:
         reserved_count = len(obs.you.reserved_public) + obs.you.reserved_deck_count
-        if reserved_count >= _MAX_RESERVED:
-            return False
-        if not any(color == Color.GOLD for color in obs.board):
+        if not helpers.can_reserve(obs.board, reserved_count):
             return False
         return any(
             self._is_high_value_target(card)
@@ -425,31 +384,8 @@ class GreedyAgent:
                 best, best_score = action, score
         return best
 
-    def _mandatory_is_blocked(self, obs: Observation) -> bool:
-        """Whether the MANDATORY phase would offer zero legal actions."""
-        has_take = any(c is not None and c != Color.GOLD for c in obs.board)
-        reserved_count = len(obs.you.reserved_public) + obs.you.reserved_deck_count
-        has_reserve = any(c == Color.GOLD for c in obs.board) and (
-            reserved_count < _MAX_RESERVED
-        )
-        has_buy = bool(self._get_affordable_cards(obs))
-        return not (has_take or has_reserve or has_buy)
-
     def _least_abundant_board_color(self, obs: Observation) -> Color | None:
         counts = Counter(c for c in obs.board if c is not None and c != Color.GOLD)
         if not counts:
             return None
         return min(counts, key=lambda c: (counts[c], c.value))
-
-    @staticmethod
-    def _color_prestige(view: PlayerView, color: Color) -> int:
-        """Prestige the player has already scored in ``color`` (public info)."""
-        points = 0
-        for purchased in view.purchased:
-            card = purchased.card
-            if card.is_multicolor:
-                if purchased.chosen_color == color:
-                    points += card.points
-            elif card.bonus == color:
-                points += card.points
-        return points

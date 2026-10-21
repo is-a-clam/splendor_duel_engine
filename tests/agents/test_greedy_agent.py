@@ -20,7 +20,7 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.cards import Ability, Card, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.observation import observation
+from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
 
@@ -52,6 +52,22 @@ def synthetic_card(
         is_multicolor=False,
         cost=Tokens() if cost is None else cost,
     )
+
+
+def _observation_with_visible_card(card: Card, tokens: Tokens) -> Observation:
+    """An observation whose only visible card is ``card`` for the active player."""
+    st = new_game(0)
+    st = replace(
+        st,
+        current_player=0,
+        phase=Phase.MANDATORY,
+        players=(
+            replace(st.players[0], tokens=tokens, bonus=Tokens()),
+            st.players[1],
+        ),
+        pyramid=((card, None, None), (None,) * 4, (None,) * 5),
+    )
+    return observation(st, 0)
 
 
 def test_greedy_agent_chooses_legal_action():
@@ -86,29 +102,89 @@ def test_greedy_agent_full_game_terminates():
     assert final.winner in (0, 1)
 
 
-def test_greedy_never_replenishes_unless_forced_or_scarce_board():
-    # Table rule: only replenish if forced (MANDATORY would have zero legal
-    # actions) AND the bag holds > 5 tokens; otherwise DoneWithReplenish.
+def test_greedy_always_declines_a_voluntary_replenish():
+    # Table rule: the agent never replenishes voluntarily. It returns
+    # DoneWithReplenish whenever the engine offers it, and takes Replenish()
+    # only when the engine offers nothing else (the forced replenish).
     agent = GreedyAgent()
+    base = board_state(current_player=0, phase=Phase.REPLENISH, bag=Tokens(white=6))
 
-    # Not forced (board still has tokens) and bag non-empty -> skip replenish
-    st = board_state(current_player=0, phase=Phase.REPLENISH, bag=Tokens(white=6))
-    dp = decide(st)
+    dp = decide(base)
     assert any(isinstance(a, Replenish) for a in dp.legal_actions)
-    action = agent.choose_action(observation(st, 0), dp.legal_actions)
+    assert any(isinstance(a, DoneWithReplenish) for a in dp.legal_actions)
+    action = agent.choose_action(observation(base, 0), dp.legal_actions)
     assert isinstance(action, DoneWithReplenish)
 
-    # Forced (empty board, no gold, nothing affordable) and bag > 5 -> replenish
-    blocked = replace(st, board=(None,) * 25, bag=Tokens(white=6))
+    # Forced: MANDATORY would have no legal action, so the engine offers
+    # Replenish() alone and the agent must take it.
+    blocked = replace(base, phase=Phase.MANDATORY, board=(None,) * 25)
     dp = decide(blocked)
+    assert [type(a) for a in dp.legal_actions] == [Replenish]
     action = agent.choose_action(observation(blocked, 0), dp.legal_actions)
     assert isinstance(action, Replenish)
 
-    # Forced but bag <= 5 -> decline (the engine forces it on the next step)
-    small_bag = replace(st, board=(None,) * 25, bag=Tokens(white=3))
-    dp = decide(small_bag)
-    action = agent.choose_action(observation(small_bag, 0), dp.legal_actions)
-    assert isinstance(action, DoneWithReplenish)
+
+def test_needed_colours_repeat_once_per_missing_token():
+    # The needed-colour list is a multiset with one entry per missing token,
+    # not one entry per colour: the discard scoring counts that multiset, so
+    # collapsing it would change the discard tie-break.
+    agent = GreedyAgent()
+    card = Card(
+        id="T1",
+        level=1,
+        points=3,
+        crowns=0,
+        bonus=Color.WHITE,
+        bonus_count=1,
+        ability=None,
+        is_multicolor=False,
+        cost=Tokens(white=3),
+    )
+    obs = _observation_with_visible_card(card, Tokens(white=1, gold=2))
+    needed = agent._colors_needed_for_best_purchase(obs)
+    assert needed.count(Color.WHITE) == 2
+    assert needed.count(Color.BLUE) == 0
+
+
+def test_greedy_buys_the_first_maximum_value_visible_card():
+    # `visible_cards` order is part of the contract: the agent breaks ties by
+    # the first maximum, so an earlier equal-value card wins.
+    agent = GreedyAgent()
+    first = Card(
+        id="A",
+        level=1,
+        points=3,
+        crowns=0,
+        bonus=Color.WHITE,
+        bonus_count=1,
+        ability=None,
+        is_multicolor=False,
+        cost=Tokens(),
+    )
+    second = Card(
+        id="B",
+        level=1,
+        points=3,
+        crowns=0,
+        bonus=Color.BLUE,
+        bonus_count=1,
+        ability=None,
+        is_multicolor=False,
+        cost=Tokens(),
+    )
+    base = board_state(current_player=0, phase=Phase.MANDATORY)
+    st = replace(
+        base,
+        players=(
+            replace(base.players[0], tokens=Tokens(gold=20), bonus=Tokens()),
+            base.players[1],
+        ),
+        pyramid=((first, second, None), (None,) * 4, (None,) * 5),
+    )
+    dp = decide(st)
+    action = agent.choose_action(observation(st, 0), dp.legal_actions)
+    assert isinstance(action, BuyCard)
+    assert action.card.id == "A"
 
 
 def test_greedy_prefers_buying_high_value_affordable_card():
