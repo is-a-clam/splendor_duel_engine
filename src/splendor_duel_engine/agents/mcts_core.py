@@ -238,12 +238,14 @@ def playout(
     """
     current_player = state.current_player
 
-    # Derive agent seeds from the MCTS RNG
-    agent_seed = rng.randint(0, 2**31 - 1)
+    # Derive distinct agent seeds from the MCTS RNG to avoid correlation
+    # in symmetric positions. XOR with 0xFFFFFFFF ensures different sequences.
+    agent_seed_0 = rng.randint(0, 2**31 - 1)
+    agent_seed_1 = rng.randint(0, 2**31 - 1) ^ 0xFFFFFFFF
 
     policy_factory = PLAYOUT_POLICIES[playout_policy]
-    agent0 = policy_factory(agent_seed)
-    agent1 = policy_factory(agent_seed)
+    agent0 = policy_factory(agent_seed_0)
+    agent1 = policy_factory(agent_seed_1)
 
     current_state = state
     depth = 0

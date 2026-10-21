@@ -47,10 +47,15 @@ def test_mcts_agent_different_seeds_different_actions():
     assert state.phase == Phase.MANDATORY
     obs = observation(state, state.current_player)
     dp = decide(state)
-    a1 = agent1.choose_action(obs, dp.legal_actions)
-    a2 = agent2.choose_action(obs, dp.legal_actions)
-    # Very likely different with >1 legal action
-    assert a1 != a2
+    # Run multiple trials; with different seeds, actions should differ in at least some cases.
+    # With >1 legal action and different seeds, probability of all 10 matching is extremely low.
+    differences = sum(
+        1
+        for _ in range(10)
+        if agent1.choose_action(obs, dp.legal_actions)
+        != agent2.choose_action(obs, dp.legal_actions)
+    )
+    assert differences >= 3
 
 
 def test_mcts_agent_full_game_terminates():
@@ -88,9 +93,11 @@ def test_mcts_agent_re_determinizes_each_decision():
     state = new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
-    actions = [agent.choose_action(obs, dp.legal_actions) for _ in range(5)]
-    # Should not be all identical (different determinizations each call)
-    assert len(set(actions)) > 1 or len(dp.legal_actions) == 1
+    # Run multiple trials; re-determinization should produce varied actions.
+    # If only 1 legal action, all will be the same (expected).
+    actions = [agent.choose_action(obs, dp.legal_actions) for _ in range(10)]
+    unique_actions = len(set(actions))
+    assert unique_actions >= 3 or len(dp.legal_actions) == 1
 
 
 def test_mcts_agent_invalid_max_playouts():
