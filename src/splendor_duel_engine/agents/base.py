@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Iterable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from splendor_duel_engine.engine.actions import (
     Action,
@@ -14,6 +15,8 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.state import GameState, new_game
+
+A = TypeVar("A")
 
 
 @runtime_checkable
@@ -27,6 +30,14 @@ class Agent(Protocol):
     def choose_action(
         self, observation: Observation, legal_actions: tuple[Action, ...]
     ) -> Action: ...
+
+
+def first_of(actions: Iterable[A], kind: type[A]) -> A | None:
+    """Return the first action of type ``kind``, or ``None`` if there is none."""
+    for action in actions:
+        if isinstance(action, kind):
+            return action
+    return None
 
 
 def play_game(

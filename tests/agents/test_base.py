@@ -37,3 +37,17 @@ def test_play_game_max_turns_none_disables_cap():
 
     final = play_game(RandomAgent(seed=1), RandomAgent(seed=2), seed=0, max_turns=None)
     assert final.winner in (0, 1)
+
+
+def test_first_of_returns_the_first_matching_action():
+    from splendor_duel_engine.agents.base import first_of
+    from splendor_duel_engine.engine.actions import (
+        DoneWithPrivileges,
+        DoneWithReplenish,
+        UsePrivilege,
+    )
+
+    actions = (UsePrivilege(index=3), DoneWithPrivileges())
+    assert first_of(actions, DoneWithPrivileges) == DoneWithPrivileges()
+    assert first_of(actions, UsePrivilege) == UsePrivilege(index=3)
+    assert first_of(actions, DoneWithReplenish) is None
