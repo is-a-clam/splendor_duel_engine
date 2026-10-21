@@ -6,6 +6,7 @@ import copy
 import dataclasses
 from dataclasses import dataclass
 
+from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.cards import Ability, Card
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
@@ -199,28 +200,6 @@ class DecisionPoint:
     legal_actions: tuple[Action, ...]
 
 
-#: The maximum number of tokens a player may hold at the end of their turn
-#: (spec §End of turn and victory). Excess goes to the bag.
-_TOKEN_LIMIT = 10
-
-
-def _color_points(player: PlayerState, color: Color) -> int:
-    """Prestige on ``player``'s purchased cards of effective colour ``color``.
-
-    Spec §End of turn and victory: a multicolor card counts as its chosen
-    colour; every other card counts as its bonus colour. Colorless no-bonus
-    cards and royal cards contribute to no colour.
-    """
-    points = 0
-    for purchased in player.purchased:
-        if purchased.card.is_multicolor:
-            if purchased.chosen_color == color:
-                points += purchased.card.points
-        elif purchased.card.bonus == color:
-            points += purchased.card.points
-    return points
-
-
 def winner_of(state: GameState) -> int | None:
     """Return the winner index if the active player has just won, else ``None``.
 
@@ -234,43 +213,12 @@ def winner_of(state: GameState) -> int | None:
     ended.
     """
     player = state.players[state.current_player]
-    if player.prestige >= 20 or player.crowns >= 10:
+    if player.prestige >= helpers.PRESTIGE_WIN or player.crowns >= helpers.CROWNS_WIN:
         return state.current_player
     for color in GEM_COLORS:
-        if _color_points(player, color) >= 10:
+        if helpers.color_points(player.purchased, color) >= helpers.COLOR_WIN_POINTS:
             return state.current_player
     return None
-
-
-def _discard_subsets(tokens: Tokens, excess: int) -> list[Tokens]:
-    """Enumerate distinct discard subsets of ``tokens`` summing to ``excess``.
-
-    Any colours count, including gold and pearls. The result excludes the
-    empty subset (``excess`` is always >= 1 when called) and is deduplicated.
-    """
-    colors = tuple(Color)
-    results: list[Tokens] = []
-    seen: set[tuple[int, ...]] = set()
-
-    def recurse(idx: int, counts: list[int], remaining: int) -> None:
-        if remaining == 0:
-            key = tuple(counts)
-            if key not in seen:
-                seen.add(key)
-                results.append(Tokens(**{c.value: n for c, n in zip(colors, counts)}))
-            return
-        if idx == len(colors):
-            return
-        color = colors[idx]
-        held = tokens.count(color)
-        # Greedily cap this colour, but never below what the rest can absorb.
-        for take in range(min(held, remaining), -1, -1):
-            counts[idx] = take
-            recurse(idx + 1, counts, remaining - take)
-        counts[idx] = 0
-
-    recurse(0, [0] * len(colors), excess)
-    return results
 
 
 def decide(state: GameState) -> DecisionPoint:
@@ -332,8 +280,7 @@ def decide(state: GameState) -> DecisionPoint:
             return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=())
         ap = state.players[state.current_player]
         bonus = ap.bonus
-        remaining = _remaining_cost_after_bonuses(pending_action.card.cost, bonus)
-        legal_payments = _enumerate_legal_payments(remaining, ap.tokens)
+        legal_payments = helpers.legal_payments(pending_action.card, ap.tokens, bonus)
         actions: list[Action] = [PayTokens(payment=p) for p in legal_payments]
         return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=tuple(actions))
 
@@ -385,10 +332,10 @@ def decide(state: GameState) -> DecisionPoint:
 
     if state.phase == Phase.DISCARD:
         ap = state.players[state.current_player]
-        excess = ap.tokens.total() - _TOKEN_LIMIT
+        excess = ap.tokens.total() - helpers.TOKEN_LIMIT
         actions: list[Action] = [
             DiscardTokens(tokens=subset)
-            for subset in _discard_subsets(ap.tokens, excess)
+            for subset in helpers.discard_subsets(ap.tokens, excess)
         ]
         return DecisionPoint(phase=Phase.DISCARD, legal_actions=tuple(actions))
 
@@ -500,129 +447,12 @@ def _legal_take_token_lines(board: tuple[Color | None, ...]) -> list[tuple[int, 
     return sorted(result, key=lambda x: (len(x), x))
 
 
-def _count_color_in_tokens(tokens_taken: list[Color]) -> dict[Color, int]:
-    counts: dict[Color, int] = {}
-    for c in tokens_taken:
-        counts[c] = counts.get(c, 0) + 1
-    return counts
-
-
-def _remaining_cost_after_bonuses(card_cost: Tokens, bonus: Tokens) -> Tokens:
-    """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced).
-
-    Gold is never a card cost per the rules; it is only a wild payment token.
-    """
-    return Tokens(
-        white=max(0, card_cost.white - bonus.white),
-        blue=max(0, card_cost.blue - bonus.blue),
-        green=max(0, card_cost.green - bonus.green),
-        red=max(0, card_cost.red - bonus.red),
-        black=max(0, card_cost.black - bonus.black),
-        pearl=card_cost.pearl,  # pearls never reduced
-        gold=0,  # gold is never a card cost
-    )
-
-
-def _can_afford(remaining_cost: Tokens, payment: Tokens) -> bool:
-    """Check if payment covers remaining cost. Gold is wild."""
-    # Calculate deficit after using colored tokens and pearls from payment
-    deficit = 0
-    for color in GEM_COLORS:
-        paid = payment.count(color)
-        needed = remaining_cost.count(color)
-        deficit += max(0, needed - paid)
-    # Pearl deficit
-    deficit += max(0, remaining_cost.pearl - payment.pearl)
-    # Gold in payment must cover total deficit
-    return payment.gold >= deficit
-
-
-def _enumerate_legal_payments(
-    remaining_cost: Tokens, player_tokens: Tokens
-) -> list[Tokens]:
-    """Enumerate all legal payment combinations from player's tokens.
-
-    For each combination of colored tokens and pearls, only the minimum gold
-    needed to cover the deficit is yielded. Using excess gold is never beneficial
-    and would bloat the action space. Complexity: O(prod(remaining_cost[c]+1))
-    for colored tokens, which is small since costs are bounded (max ~6 per color).
-    """
-    legal: list[Tokens] = []
-
-    # Iterate over possible colored token and pearl spending
-    for w in range(min(player_tokens.white, remaining_cost.white) + 1):
-        for b in range(min(player_tokens.blue, remaining_cost.blue) + 1):
-            for g in range(min(player_tokens.green, remaining_cost.green) + 1):
-                for r in range(min(player_tokens.red, remaining_cost.red) + 1):
-                    for bl in range(min(player_tokens.black, remaining_cost.black) + 1):
-                        for p in range(
-                            min(player_tokens.pearl, remaining_cost.pearl) + 1
-                        ):
-                            # Compute minimum gold needed for this colored combination
-                            deficit = 0
-                            for color, paid in (
-                                (Color.WHITE, w),
-                                (Color.BLUE, b),
-                                (Color.GREEN, g),
-                                (Color.RED, r),
-                                (Color.BLACK, bl),
-                            ):
-                                needed = remaining_cost.count(color)
-                                deficit += max(0, needed - paid)
-                            deficit += max(0, remaining_cost.pearl - p)
-
-                            # Only yield if we have enough gold and it's within player's gold
-                            if deficit <= player_tokens.gold:
-                                payment = Tokens(
-                                    white=w,
-                                    blue=b,
-                                    green=g,
-                                    red=r,
-                                    black=bl,
-                                    pearl=p,
-                                    gold=deficit,
-                                )
-                                legal.append(payment)
-
-    # Deduplicate (should not be needed now, but kept for safety)
-    unique = []
-    seen = set()
-    for payment in legal:
-        key = (
-            payment.white,
-            payment.blue,
-            payment.green,
-            payment.red,
-            payment.black,
-            payment.pearl,
-            payment.gold,
-        )
-        if key not in seen:
-            seen.add(key)
-            unique.append(payment)
-    return unique
-
-
-def _find_gold_on_board(board: tuple[Color | None, ...]) -> int | None:
-    """Return index of a gold token on board, or None."""
-    for idx, color in enumerate(board):
-        if color == Color.GOLD:
-            return idx
-    return None
-
-
 def _get_reserve_actions(state: GameState) -> list[ReserveCard]:
     """Enumerate all legal ReserveCard actions for the current player."""
     active = state.current_player
     ap = state.players[active]
 
-    # Must have gold on board
-    gold_idx = _find_gold_on_board(state.board)
-    if gold_idx is None:
-        return []
-
-    # Must have fewer than 3 reserved cards
-    if len(ap.reserved) >= 3:
+    if not helpers.can_reserve(state.board, len(ap.reserved)):
         return []
 
     actions: list[ReserveCard] = []
@@ -660,26 +490,19 @@ def _get_buyable_cards(state: GameState) -> list[BuyCard]:
     # Own reserved cards (checked first, so they take precedence)
     for reserved in ap.reserved:
         card = reserved.card
-        remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-        if _can_afford(remaining, ap.tokens):
-            if card.is_multicolor:
-                has_colored_bonus = any(bonus.count(c) > 0 for c in GEM_COLORS)
-                if not has_colored_bonus:
-                    continue
+        if helpers.can_afford_card(card, ap.tokens, bonus):
             buyable[card.id] = (card, "reserved")
 
     # Pyramid cards
     for row_idx, row in enumerate(state.pyramid):
         for col_idx, card in enumerate(row):
-            if card is not None and card.id not in buyable:
-                remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-                if _can_afford(remaining, ap.tokens):
-                    if card.is_multicolor:
-                        has_colored_bonus = any(bonus.count(c) > 0 for c in GEM_COLORS)
-                        if not has_colored_bonus:
-                            continue
-                    source = f"pyramid_{row_idx}_{col_idx}"
-                    buyable[card.id] = (card, source)
+            if (
+                card is not None
+                and card.id not in buyable
+                and helpers.can_afford_card(card, ap.tokens, bonus)
+            ):
+                source = f"pyramid_{row_idx}_{col_idx}"
+                buyable[card.id] = (card, source)
 
     return [BuyCard(card=card, source=source) for card, source in buyable.values()]
 
@@ -812,17 +635,8 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
     new_ap = dataclasses.replace(ap, tokens=ap.tokens + taken_tokens)
     state = _replace_player(state, active, new_ap)
 
-    penalty = False
-    color_counts = _count_color_in_tokens(taken_colors)
-    for cnt in color_counts.values():
-        if cnt >= 3:
-            penalty = True
-            break
-    if color_counts.get(Color.PEARL, 0) >= 2:
-        penalty = True
-
     new_priv_supply = state.privileges_supply
-    if penalty:
+    if helpers.take_penalty(taken_colors):
         opp = 1 - active
         new_players, new_priv_supply = _grant_privilege(
             state.players, opp, state.privileges_supply
@@ -840,10 +654,8 @@ def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
     ap = state.players[active]
 
     # Minimal validation only
-    if _find_gold_on_board(state.board) is None:
-        raise ValueError("no gold on board to reserve")
-    if len(ap.reserved) >= 3:
-        raise ValueError("player already has 3 reserved cards")
+    if not helpers.can_reserve(state.board, len(ap.reserved)):
+        raise ValueError("cannot reserve card")
 
     # Validate source exists and has a card (but don't extract yet)
     if action.source == "pyramid":
@@ -960,16 +772,9 @@ def _apply_buy_card(state: GameState, action: BuyCard) -> GameState:
     else:
         raise ValueError(f"unknown buy source: {source}")
 
-    # Verify affordability
-    remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-    if not _can_afford(remaining, ap.tokens):
+    # Verify affordability (the multicolor rule is folded into can_afford_card)
+    if not helpers.can_afford_card(card, ap.tokens, bonus):
         raise ValueError("cannot afford card")
-
-    # Multicolor restriction
-    if card.is_multicolor:
-        has_colored_bonus = any(bonus.count(c) > 0 for c in GEM_COLORS)
-        if not has_colored_bonus:
-            raise ValueError("cannot buy multicolor card without colored bonus")
 
     return dataclasses.replace(
         state,
@@ -991,8 +796,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
 
     # Validate payment
     bonus = ap.bonus
-    remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-    if not _can_afford(remaining, action.payment):
+    if not helpers.can_afford_card(card, action.payment, bonus):
         raise ValueError("insufficient payment")
     # Also verify payment doesn't exceed player's tokens
     for color in Color:
@@ -1199,7 +1003,7 @@ def _end_of_turn(
         state = dataclasses.replace(state, pending_royal=False)
         if state.royals_available:
             return dataclasses.replace(state, phase=Phase.CHOOSE_ROYAL)
-    if state.players[active].tokens.total() > _TOKEN_LIMIT:
+    if state.players[active].tokens.total() > helpers.TOKEN_LIMIT:
         # Defer the win check until after the player discards. ``extra_turn``
         # carries the pending-seat decision across the DISCARD decision point.
         return dataclasses.replace(
@@ -1244,7 +1048,7 @@ def _apply_discard_tokens(state: GameState, tokens: Tokens) -> GameState:
     """Move chosen excess tokens from the active player's hand to the bag."""
     active = state.current_player
     ap = state.players[active]
-    excess = ap.tokens.total() - _TOKEN_LIMIT
+    excess = ap.tokens.total() - helpers.TOKEN_LIMIT
 
     for color in Color:
         if tokens.count(color) < 0:

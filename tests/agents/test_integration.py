@@ -11,26 +11,9 @@ from splendor_duel_engine.agents.base import play_game
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.engine.colors import GEM_COLORS
+from splendor_duel_engine.engine.helpers import color_points
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import PlayerState
-
-
-def _color_points(player: PlayerState, color: object) -> int:
-    """Prestige the player scores from purchased cards of one gem colour.
-
-    Mirrors the engine's colour-win rule: ordinary cards count toward their
-    bonus colour; a multicolor card counts toward the colour chosen when it
-    was bought.
-    """
-    points = 0
-    for purchased in player.purchased:
-        card = purchased.card
-        if card.is_multicolor:
-            if purchased.chosen_color == color:
-                points += card.points
-        elif card.bonus == color:
-            points += card.points
-    return points
 
 
 def _win_conditions(player: PlayerState) -> set[str]:
@@ -40,7 +23,7 @@ def _win_conditions(player: PlayerState) -> set[str]:
         conditions.add("prestige")
     if player.crowns >= 10:
         conditions.add("crowns")
-    if any(_color_points(player, color) >= 10 for color in GEM_COLORS):
+    if any(color_points(player.purchased, color) >= 10 for color in GEM_COLORS):
         conditions.add("color")
     return conditions
 

@@ -12,12 +12,11 @@ from splendor_duel_engine.engine.actions import (
     PayTokens,
     Replenish,
     ReserveCard,
-    _can_afford,
-    _remaining_cost_after_bonuses,
     apply,
     decide,
 )
 from splendor_duel_engine.engine.colors import Color, Tokens
+from splendor_duel_engine.engine.helpers import can_afford_card
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
 
@@ -432,8 +431,7 @@ def test_choose_payment_phase_offers_only_legal_payments():
     # Every offered payment must be legal
     for pay in pay_actions:
         bonus = st2.players[0].bonus
-        remaining = _remaining_cost_after_bonuses(card.cost, bonus)
-        assert _can_afford(remaining, pay.payment)
+        assert can_afford_card(card, pay.payment, bonus)
         # Payment must not exceed player's tokens
         for color in Color:
             assert pay.payment.count(color) <= st2.players[0].tokens.count(color)
