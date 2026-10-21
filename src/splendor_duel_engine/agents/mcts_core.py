@@ -6,16 +6,17 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from splendor_duel_engine.agents.base import play_game_from_state
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.engine.actions import Action, apply, decide
+from splendor_duel_engine.engine.colors import GEM_COLORS
+from splendor_duel_engine.engine.observation import observation
 from splendor_duel_engine.engine.state import GameState
 
 # Factory functions for playout policies to ensure fresh RNG per playout.
 # Both are callables accepting a seed derived from the MCTS RNG.
 PLAYOUT_POLICIES = {
-    "greedy": lambda seed: GreedyAgent(),
+    "greedy": lambda seed: GreedyAgent(seed=seed),
     "random": lambda seed: RandomAgent(seed=seed),
 }
 
@@ -146,10 +147,79 @@ def _auto_expand_forced_moves(node: MCTSNode) -> MCTSNode:
     return node
 
 
+def _heuristic_evaluation(state: GameState, perspective: int) -> float:
+    """Evaluate state from perspective player's view. Returns value in [0, 1].
+
+    Heuristic combines:
+    - Prestige difference (normalized)
+    - Crown difference (each crown ~2 prestige value)
+    - Single-color win proximity (color prestige difference)
+    - Token advantage (especially gold)
+    - Bonus token advantage
+    - Reserved card potential
+
+    Args:
+        state: The game state to evaluate.
+        perspective: The player index (0 or 1) to evaluate from.
+
+    Returns:
+        Value in [0, 1] where 1.0 is a certain win for perspective player,
+        0.0 is a certain loss, 0.5 is even.
+    """
+    p = state.players[perspective]
+    opp = state.players[1 - perspective]
+
+    # Prestige difference (normalized)
+    prestige_diff = p.prestige - opp.prestige
+
+    # Crown difference (each crown ~2 prestige value)
+    crown_diff = (p.crowns - opp.crowns) * 2
+
+    # Single-color win proximity
+    color_bonus = 0.0
+    for color in GEM_COLORS:
+        color_bonus += (p.color_prestige(color) - opp.color_prestige(color)) * 0.1
+
+    # Token advantage: gold is most valuable, then pearls, then gems
+    token_diff = (p.tokens.gold - opp.tokens.gold) * 3.0
+    token_diff += (p.tokens.pearl - opp.tokens.pearl) * 1.5
+    for color in GEM_COLORS:
+        token_diff += (p.tokens.count(color) - opp.tokens.count(color)) * 0.5
+
+    # Bonus token advantage (each bonus is worth ~1 prestige in that color)
+    bonus_diff = 0.0
+    for color in GEM_COLORS:
+        bonus_diff += (p.bonus.count(color) - opp.bonus.count(color)) * 1.0
+
+    # Reserved card potential (high-value reserved cards)
+    reserved_diff = 0.0
+    for rc in p.reserved:
+        card = rc.card
+        reserved_diff += card.points * 0.5 + card.crowns * 1.0
+    for rc in opp.reserved:
+        card = rc.card
+        reserved_diff -= card.points * 0.5 + card.crowns * 1.0
+
+    # Combine and normalize to [0, 1]
+    # Scaling factor: prestige ~20, crowns ~20, color ~10, tokens ~20, bonuses ~10, reserved ~10
+    score = (
+        prestige_diff
+        + crown_diff
+        + color_bonus
+        + token_diff
+        + bonus_diff
+        + reserved_diff
+    )
+    return max(0.0, min(1.0, 0.5 + score / 80.0))
+
+
 def playout(
-    state: GameState, rng: random.Random, playout_policy: str = "greedy"
+    state: GameState,
+    rng: random.Random,
+    playout_policy: str = "greedy",
+    max_depth: int = 15,
 ) -> float:
-    """Simulate from the current state to terminal using the given policy.
+    """Simulate from the current state up to max_depth plies, then evaluate heuristically.
 
     Returns the result from the perspective of the player whose turn it is
     in the given state: 1.0 for win, 0.5 for draw, 0.0 for loss.
@@ -161,6 +231,7 @@ def playout(
         state: Starting game state (must be determinized).
         rng: Random number generator (used to derive agent seeds).
         playout_policy: "greedy" or "random" (default "greedy").
+        max_depth: Maximum number of plies to simulate before heuristic evaluation (default 15).
 
     Returns:
         1.0 if current player wins, 0.5 for draw, 0.0 if current player loses.
@@ -174,16 +245,23 @@ def playout(
     agent0 = policy_factory(agent_seed)
     agent1 = policy_factory(agent_seed)
 
-    try:
-        # Use a higher turn limit for playouts to avoid premature termination
-        final = play_game_from_state(state, agent0, agent1, max_turns=1000)
-    except RuntimeError:
-        # Playout exceeded turn limit — treat as draw
-        return 0.5
+    current_state = state
+    depth = 0
 
-    if final.winner is None:
-        return 0.5
-    return 1.0 if final.winner == current_player else 0.0
+    while current_state.winner is None and depth < max_depth:
+        player = current_state.current_player
+        obs = observation(current_state, player)
+        dp = decide(current_state)
+        agent = agent0 if player == 0 else agent1
+        action = agent.choose_action(obs, dp.legal_actions)
+        current_state = apply(current_state, action)
+        depth += 1
+
+    if current_state.winner is not None:
+        return 1.0 if current_state.winner == current_player else 0.0
+
+    # Heuristic evaluation from current_state perspective
+    return _heuristic_evaluation(current_state, current_player)
 
 
 def backpropagate(node: MCTSNode, result: float):
@@ -210,6 +288,7 @@ def mcts_search(
     max_playouts: int,
     exploration: float = 1.414,
     playout_policy: str = "greedy",
+    max_depth: int = 15,
 ) -> Action:
     """Run MCTS search and return the most-visited action.
 
@@ -224,6 +303,7 @@ def mcts_search(
         max_playouts: Number of playouts to run.
         exploration: UCT exploration constant (default sqrt(2)).
         playout_policy: "greedy" or "random" for playout simulations.
+        max_depth: Maximum plies per playout before heuristic evaluation (default 15).
 
     Returns:
         The action with the most visits from the root.
@@ -250,7 +330,7 @@ def mcts_search(
                 result = 1.0 if node.state.winner == current_player else 0.0
                 backpropagate(node, result)
             else:
-                result = playout(node.state, rng, playout_policy)
+                result = playout(node.state, rng, playout_policy, max_depth)
                 backpropagate(node, result)
         else:
             # This branch should be unreachable: uct_select guarantees we only

@@ -3,12 +3,13 @@
 Implements the "Greedy heuristics" table of the baseline-agents plan (Task 3).
 The agent reads only the :class:`Observation` it is given (hidden-information
 discipline: no ``GameState`` access) and only ever returns an action taken
-verbatim from ``legal_actions``. It is fully deterministic: no RNG, no global
-state, no clock.
+verbatim from ``legal_actions``. It is deterministic by default but can use
+a seed for stochastic tie-breaking in playouts.
 """
 
 from __future__ import annotations
 
+import random
 from collections import Counter
 from typing import TYPE_CHECKING
 
@@ -59,10 +60,21 @@ _ROYAL_PRIORITY = {
 
 
 class GreedyAgent:
-    """A deterministic greedy agent driven by per-phase heuristics."""
+    """A greedy agent driven by per-phase heuristics.
 
-    def __init__(self) -> None:
-        pass
+    By default, the agent is fully deterministic (no RNG). When a ``seed`` is
+    provided, tie-breaking in action selection becomes stochastic, which is
+    useful for MCTS playouts to introduce variance.
+    """
+
+    def __init__(self, seed: int | None = None) -> None:
+        self._rng = random.Random(seed) if seed is not None else None
+
+    def _maybe_shuffle(self, actions: list[Action]) -> list[Action]:
+        """Shuffle actions if RNG is available, for stochastic tie-breaking."""
+        if self._rng is not None and len(actions) > 1:
+            self._rng.shuffle(actions)
+        return actions
 
     def choose_action(
         self, observation: Observation, legal_actions: tuple[Action, ...]
@@ -184,7 +196,7 @@ class GreedyAgent:
             return legal_actions[0]
         # Prefer fewest gold, then fewest total tokens.
         return max(
-            pay_actions,
+            self._maybe_shuffle(pay_actions),
             key=lambda a: (-a.payment.gold, -a.payment.total()),
         )
 
@@ -215,7 +227,7 @@ class GreedyAgent:
         # engine only offers non-gold colors the opponent actually holds.)
         needed = set(self._colors_needed_for_best_purchase(obs))
         return max(
-            steal_actions,
+            self._maybe_shuffle(steal_actions),
             key=lambda a: (
                 a.color in needed,
                 obs.opponent.tokens.count(a.color),
@@ -231,7 +243,7 @@ class GreedyAgent:
         # Priority: extra turn > privilege > steal token > plain points.
         by_id = {royal.id: royal for royal in obs.royals_available}
         return max(
-            royal_actions,
+            self._maybe_shuffle(royal_actions),
             key=lambda a: _ROYAL_PRIORITY.get(
                 by_id[a.royal_id].ability if a.royal_id in by_id else None, 0
             ),
@@ -261,7 +273,7 @@ class GreedyAgent:
                 high_count_bonus,
             )
 
-        return max(discard_actions, key=discard_key)
+        return max(self._maybe_shuffle(discard_actions), key=discard_key)
 
     # --- Helpers ---
 
@@ -332,7 +344,8 @@ class GreedyAgent:
     def _best_buy_action(self, buy_actions: list[BuyCard]) -> BuyCard:
         # Highest points x2 + crowns.
         return max(
-            buy_actions, key=lambda a: a.card.points * _VALUE_WEIGHT + a.card.crowns
+            self._maybe_shuffle(buy_actions),
+            key=lambda a: a.card.points * _VALUE_WEIGHT + a.card.crowns,
         )
 
     def _enables_high_value_buy(self, obs: Observation, action: TakeTokens) -> bool:
@@ -367,7 +380,7 @@ class GreedyAgent:
             total = len(colors) * _TOKEN_WEIGHT + needed_bonus - penalty
             return (total, action.line)
 
-        return max(take_actions, key=score)
+        return max(self._maybe_shuffle(take_actions), key=score)
 
     def _should_reserve(self, obs: Observation) -> bool:
         reserved_count = len(obs.you.reserved_public) + obs.you.reserved_deck_count

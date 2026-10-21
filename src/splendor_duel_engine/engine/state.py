@@ -79,6 +79,25 @@ class PlayerState:
     purchased: tuple[PurchasedCard, ...]
     privileges: int
 
+    def color_prestige(self, color: Color) -> int:
+        """Return total prestige points in the given color.
+
+        Includes points from purchased cards whose bonus matches the color,
+        and the bonus counts themselves (each bonus counts as 1 point in that color).
+        For multicolor cards, the chosen_color determines which color gets the points.
+        """
+        total = 0
+        for pc in self.purchased:
+            card = pc.card
+            # Determine the effective bonus color for this card
+            effective_bonus = pc.chosen_color if card.is_multicolor else card.bonus
+            if effective_bonus == color:
+                # Card points count toward that color's prestige
+                total += card.points
+                # Each bonus also counts as 1 point in that color
+                total += card.bonus_count
+        return total
+
 
 @dataclass(frozen=True, slots=True)
 class GameState:

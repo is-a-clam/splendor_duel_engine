@@ -27,7 +27,7 @@ class MCTSAgent:
         seed: int | None = None,
         max_playouts: int = 2000,
         exploration: float = 1.414,
-        playout_policy: str = "greedy",
+        playout_policy: str = "random",
     ) -> None:
         """Create an MCTS agent.
 
@@ -35,7 +35,7 @@ class MCTSAgent:
             seed: Random seed for reproducibility. If None, uses system entropy.
             max_playouts: Number of playouts per search (default 2000).
             exploration: UCT exploration constant (default sqrt(2) ≈ 1.414).
-            playout_policy: "greedy" or "random" for playout simulations (default "greedy").
+            playout_policy: "greedy" or "random" for playout simulations (default "random").
         """
         if max_playouts < 1:
             raise ValueError("max_playouts must be >= 1")
