@@ -94,7 +94,9 @@ def state_fingerprint(state) -> tuple:
         state.current_player,
         state.winner,
         state.phase.value,
-        action_fingerprint(state.pending_buy) if state.pending_buy is not None else None,
+        action_fingerprint(state.pending_buy)
+        if state.pending_buy is not None
+        else None,
         (
             action_fingerprint(state.pending_reserve)
             if state.pending_reserve is not None

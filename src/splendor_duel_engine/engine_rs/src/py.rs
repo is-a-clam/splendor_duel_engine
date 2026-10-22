@@ -5,9 +5,13 @@ use crate::colors::{Color, Tokens};
 use crate::observation::{observation as state_observation, Observation, PlayerView};
 use crate::phase::Phase;
 use crate::rng;
-use crate::state::{new_game as state_new_game, BuyCard, GameState, PlayerState, PurchasedCard, ReserveCard, ReservedCard};
+use crate::state::{
+    new_game as state_new_game, BuyCard, GameState, PlayerState, PurchasedCard, ReserveCard,
+    ReservedCard,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
+use std::rc::Rc;
 
 #[pyclass(name = "Random", module = "splendor_duel_engine._core")]
 #[derive(Clone)]
@@ -68,7 +72,13 @@ impl PyRandom {
 
 /// Color enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Color", module = "splendor_duel_engine._core", from_py_object)]
+#[pyclass(
+    eq,
+    frozen,
+    name = "Color",
+    module = "splendor_duel_engine._core",
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyColor {
     WHITE,
@@ -106,6 +116,12 @@ impl PyColor {
     }
 }
 
+impl From<&PyColor> for Color {
+    fn from(c: &PyColor) -> Self {
+        c.inner()
+    }
+}
+
 #[pymethods]
 impl PyColor {
     #[getter]
@@ -121,15 +137,18 @@ impl PyColor {
     }
 
     fn __repr__(&self) -> String {
-        format!("Color.{}", match self {
-            PyColor::WHITE => "WHITE",
-            PyColor::BLUE => "BLUE",
-            PyColor::GREEN => "GREEN",
-            PyColor::RED => "RED",
-            PyColor::BLACK => "BLACK",
-            PyColor::PEARL => "PEARL",
-            PyColor::GOLD => "GOLD",
-        })
+        format!(
+            "Color.{}",
+            match self {
+                PyColor::WHITE => "WHITE",
+                PyColor::BLUE => "BLUE",
+                PyColor::GREEN => "GREEN",
+                PyColor::RED => "RED",
+                PyColor::BLACK => "BLACK",
+                PyColor::PEARL => "PEARL",
+                PyColor::GOLD => "GOLD",
+            }
+        )
     }
 
     fn __str__(&self) -> String {
@@ -138,7 +157,14 @@ impl PyColor {
 }
 
 /// Tokens struct wrapper.
-#[pyclass(frozen, eq, name = "Tokens", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "Tokens",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PyTokens {
     pub white: u8,
@@ -178,19 +204,17 @@ impl From<PyTokens> for Tokens {
     }
 }
 
+impl From<&PyTokens> for Tokens {
+    fn from(t: &PyTokens) -> Self {
+        (*t).into()
+    }
+}
+
 #[pymethods]
 impl PyTokens {
     #[new]
     #[pyo3(signature = (white=0, blue=0, green=0, red=0, black=0, pearl=0, gold=0))]
-    fn new(
-        white: u8,
-        blue: u8,
-        green: u8,
-        red: u8,
-        black: u8,
-        pearl: u8,
-        gold: u8,
-    ) -> Self {
+    fn new(white: u8, blue: u8, green: u8, red: u8, black: u8, pearl: u8, gold: u8) -> Self {
         PyTokens {
             white,
             blue,
@@ -257,13 +281,7 @@ impl PyTokens {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         (
-            self.white,
-            self.blue,
-            self.green,
-            self.red,
-            self.black,
-            self.pearl,
-            self.gold,
+            self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold,
         )
             .hash(&mut hasher);
         hasher.finish() as isize
@@ -272,7 +290,13 @@ impl PyTokens {
 
 /// Ability enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Ability", module = "splendor_duel_engine._core", from_py_object)]
+#[pyclass(
+    eq,
+    frozen,
+    name = "Ability",
+    module = "splendor_duel_engine._core",
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyAbility {
     EXTRA_TURN,
@@ -301,6 +325,12 @@ impl PyAbility {
     }
 }
 
+impl From<&PyAbility> for Ability {
+    fn from(a: &PyAbility) -> Self {
+        a.inner()
+    }
+}
+
 #[pymethods]
 impl PyAbility {
     #[getter]
@@ -312,16 +342,21 @@ impl PyAbility {
     fn from_value(s: &str) -> PyResult<PyAbility> {
         Ability::from_value(s)
             .map(PyAbility::from_inner)
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("invalid ability: {}", s)))
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!("invalid ability: {}", s))
+            })
     }
 
     fn __repr__(&self) -> String {
-        format!("Ability.{}", match self {
-            PyAbility::EXTRA_TURN => "EXTRA_TURN",
-            PyAbility::TAKE_MATCHING_TOKEN => "TAKE_MATCHING_TOKEN",
-            PyAbility::STEAL_TOKEN => "STEAL_TOKEN",
-            PyAbility::PRIVILEGE => "PRIVILEGE",
-        })
+        format!(
+            "Ability.{}",
+            match self {
+                PyAbility::EXTRA_TURN => "EXTRA_TURN",
+                PyAbility::TAKE_MATCHING_TOKEN => "TAKE_MATCHING_TOKEN",
+                PyAbility::STEAL_TOKEN => "STEAL_TOKEN",
+                PyAbility::PRIVILEGE => "PRIVILEGE",
+            }
+        )
     }
 
     fn __str__(&self) -> String {
@@ -331,7 +366,13 @@ impl PyAbility {
 
 /// Phase enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Phase", module = "splendor_duel_engine._core", from_py_object)]
+#[pyclass(
+    eq,
+    frozen,
+    name = "Phase",
+    module = "splendor_duel_engine._core",
+    from_py_object
+)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyPhase {
     USE_PRIVILEGES,
@@ -381,6 +422,12 @@ impl PyPhase {
     }
 }
 
+impl From<&PyPhase> for Phase {
+    fn from(p: &PyPhase) -> Self {
+        p.inner()
+    }
+}
+
 #[pymethods]
 impl PyPhase {
     #[getter]
@@ -396,19 +443,22 @@ impl PyPhase {
     }
 
     fn __repr__(&self) -> String {
-        format!("Phase.{}", match self {
-            PyPhase::USE_PRIVILEGES => "USE_PRIVILEGES",
-            PyPhase::REPLENISH => "REPLENISH",
-            PyPhase::MANDATORY => "MANDATORY",
-            PyPhase::CHOOSE_PAYMENT => "CHOOSE_PAYMENT",
-            PyPhase::CHOOSE_GOLD => "CHOOSE_GOLD",
-            PyPhase::MULTICOLOR_COLOR => "MULTICOLOR_COLOR",
-            PyPhase::STEAL_TOKEN => "STEAL_TOKEN",
-            PyPhase::TAKE_MATCHING_TOKEN => "TAKE_MATCHING_TOKEN",
-            PyPhase::CHOOSE_ROYAL => "CHOOSE_ROYAL",
-            PyPhase::DISCARD => "DISCARD",
-            PyPhase::GAME_OVER => "GAME_OVER",
-        })
+        format!(
+            "Phase.{}",
+            match self {
+                PyPhase::USE_PRIVILEGES => "USE_PRIVILEGES",
+                PyPhase::REPLENISH => "REPLENISH",
+                PyPhase::MANDATORY => "MANDATORY",
+                PyPhase::CHOOSE_PAYMENT => "CHOOSE_PAYMENT",
+                PyPhase::CHOOSE_GOLD => "CHOOSE_GOLD",
+                PyPhase::MULTICOLOR_COLOR => "MULTICOLOR_COLOR",
+                PyPhase::STEAL_TOKEN => "STEAL_TOKEN",
+                PyPhase::TAKE_MATCHING_TOKEN => "TAKE_MATCHING_TOKEN",
+                PyPhase::CHOOSE_ROYAL => "CHOOSE_ROYAL",
+                PyPhase::DISCARD => "DISCARD",
+                PyPhase::GAME_OVER => "GAME_OVER",
+            }
+        )
     }
 
     fn __str__(&self) -> String {
@@ -417,7 +467,14 @@ impl PyPhase {
 }
 
 /// Card wrapper.
-#[pyclass(frozen, eq, name = "Card", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "Card",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyCard {
     pub id: String,
@@ -450,6 +507,22 @@ impl From<Card> for PyCard {
 impl From<&Card> for PyCard {
     fn from(c: &Card) -> Self {
         c.clone().into()
+    }
+}
+
+impl From<&PyCard> for Card {
+    fn from(c: &PyCard) -> Self {
+        Card {
+            id: c.id.clone(),
+            level: c.level,
+            points: c.points,
+            crowns: c.crowns,
+            bonus: c.bonus.as_ref().map(|b| b.inner()),
+            bonus_count: c.bonus_count,
+            ability: c.ability.as_ref().map(|a| a.inner()),
+            is_multicolor: c.is_multicolor,
+            cost: (&c.cost).into(),
+        }
     }
 }
 
@@ -495,7 +568,14 @@ impl PyCard {
 }
 
 /// RoyalCard wrapper.
-#[pyclass(frozen, eq, name = "RoyalCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "RoyalCard",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyRoyalCard {
     pub id: String,
@@ -519,6 +599,16 @@ impl From<&RoyalCard> for PyRoyalCard {
     }
 }
 
+impl From<&PyRoyalCard> for RoyalCard {
+    fn from(r: &PyRoyalCard) -> Self {
+        RoyalCard {
+            id: r.id.clone(),
+            points: r.points,
+            ability: r.ability.as_ref().map(|a| a.inner()),
+        }
+    }
+}
+
 #[pymethods]
 impl PyRoyalCard {
     #[new]
@@ -534,13 +624,22 @@ impl PyRoyalCard {
     fn __repr__(&self) -> String {
         format!(
             "RoyalCard(id={:?}, points={}, ability={:?})",
-            self.id, self.points, self.ability.as_ref().map(|a| a.inner().value())
+            self.id,
+            self.points,
+            self.ability.as_ref().map(|a| a.inner().value())
         )
     }
 }
 
 /// BuyCard wrapper.
-#[pyclass(frozen, eq, name = "BuyCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "BuyCard",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyBuyCard {
     pub card: PyCard,
@@ -552,6 +651,15 @@ impl From<BuyCard> for PyBuyCard {
         PyBuyCard {
             card: b.card.into(),
             source: b.source,
+        }
+    }
+}
+
+impl From<&PyBuyCard> for BuyCard {
+    fn from(b: &PyBuyCard) -> Self {
+        BuyCard {
+            card: (&b.card).into(),
+            source: b.source.clone(),
         }
     }
 }
@@ -569,7 +677,14 @@ impl PyBuyCard {
 }
 
 /// ReserveCard wrapper.
-#[pyclass(frozen, eq, name = "ReserveCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "ReserveCard",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyReserveCard {
     pub source: String,
@@ -585,6 +700,15 @@ impl From<ReserveCard> for PyReserveCard {
     }
 }
 
+impl From<&PyReserveCard> for ReserveCard {
+    fn from(r: &PyReserveCard) -> Self {
+        ReserveCard {
+            source: r.source.clone(),
+            index: r.index,
+        }
+    }
+}
+
 #[pymethods]
 impl PyReserveCard {
     #[new]
@@ -595,7 +719,14 @@ impl PyReserveCard {
 }
 
 /// PurchasedCard wrapper.
-#[pyclass(frozen, eq, name = "PurchasedCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "PurchasedCard",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyPurchasedCard {
     pub card: PyCard,
@@ -607,6 +738,15 @@ impl From<PurchasedCard> for PyPurchasedCard {
         PyPurchasedCard {
             card: p.card.into(),
             chosen_color: p.chosen_color.map(PyColor::from_inner),
+        }
+    }
+}
+
+impl From<&PyPurchasedCard> for PurchasedCard {
+    fn from(p: &PyPurchasedCard) -> Self {
+        PurchasedCard {
+            card: (&p.card).into(),
+            chosen_color: p.chosen_color.as_ref().map(|c| c.inner()),
         }
     }
 }
@@ -624,7 +764,14 @@ impl PyPurchasedCard {
 }
 
 /// ReservedCard wrapper.
-#[pyclass(frozen, eq, name = "ReservedCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "ReservedCard",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyReservedCard {
     pub card: PyCard,
@@ -635,6 +782,15 @@ impl From<ReservedCard> for PyReservedCard {
     fn from(r: ReservedCard) -> Self {
         PyReservedCard {
             card: r.card.into(),
+            from_deck: r.from_deck,
+        }
+    }
+}
+
+impl From<&PyReservedCard> for ReservedCard {
+    fn from(r: &PyReservedCard) -> Self {
+        ReservedCard {
+            card: (&r.card).into(),
             from_deck: r.from_deck,
         }
     }
@@ -653,7 +809,14 @@ impl PyReservedCard {
 }
 
 /// PlayerState wrapper.
-#[pyclass(frozen, eq, name = "PlayerState", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "PlayerState",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyPlayerState {
     pub tokens: PyTokens,
@@ -674,6 +837,20 @@ impl From<PlayerState> for PyPlayerState {
             crowns: p.crowns,
             reserved: p.reserved.into_iter().map(PyReservedCard::from).collect(),
             purchased: p.purchased.into_iter().map(PyPurchasedCard::from).collect(),
+            privileges: p.privileges,
+        }
+    }
+}
+
+impl From<&PyPlayerState> for PlayerState {
+    fn from(p: &PyPlayerState) -> Self {
+        PlayerState {
+            tokens: (&p.tokens).into(),
+            bonus: (&p.bonus).into(),
+            prestige: p.prestige,
+            crowns: p.crowns,
+            reserved: p.reserved.iter().map(ReservedCard::from).collect(),
+            purchased: p.purchased.iter().map(PurchasedCard::from).collect(),
             privileges: p.privileges,
         }
     }
@@ -705,7 +882,14 @@ impl PyPlayerState {
 }
 
 /// PlayerView wrapper.
-#[pyclass(frozen, eq, name = "PlayerView", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "PlayerView",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyPlayerView {
     pub tokens: PyTokens,
@@ -761,7 +945,14 @@ impl PyPlayerView {
 }
 
 /// Observation wrapper.
-#[pyclass(frozen, eq, name = "Observation", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[pyclass(
+    frozen,
+    eq,
+    name = "Observation",
+    module = "splendor_duel_engine._core",
+    get_all,
+    from_py_object
+)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyObservation {
     pub you: PyPlayerView,
@@ -794,7 +985,11 @@ impl From<Observation> for PyObservation {
                 .iter()
                 .map(|row| row.iter().map(|c| c.as_ref().map(PyCard::from)).collect())
                 .collect(),
-            royals_available: o.royals_available.into_iter().map(PyRoyalCard::from).collect(),
+            royals_available: o
+                .royals_available
+                .into_iter()
+                .map(PyRoyalCard::from)
+                .collect(),
             privileges_supply: o.privileges_supply,
             deck_counts: (o.deck_counts[0], o.deck_counts[1], o.deck_counts[2]),
             bag: o.bag.into(),
@@ -857,6 +1052,10 @@ impl PyObservation {
 }
 
 /// GameState wrapper.
+///
+/// Takes `seed` in place of Python's `rng`: the determinizer builds a state
+/// from sampled hidden information and supplies the seed, and the Rust
+/// `GameState` derives its own RNG stream from it.
 #[pyclass(unsendable, name = "GameState", module = "splendor_duel_engine._core")]
 pub struct PyGameState {
     pub inner: GameState,
@@ -865,10 +1064,73 @@ pub struct PyGameState {
 #[pymethods]
 impl PyGameState {
     #[new]
-    #[pyo3(signature = (seed))]
-    fn new(seed: i64) -> PyResult<Self> {
+    #[pyo3(signature = (players, board, bag, decks, pyramid, royals_available, privileges_supply, current_player, winner, phase, pending_buy, pending_reserve, seed, extra_turn=false, pending_ability=None, pending_royal=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        players: Vec<PyPlayerState>,
+        board: Vec<Option<PyColor>>,
+        bag: &PyTokens,
+        decks: Vec<Vec<PyCard>>,
+        pyramid: Vec<Vec<Option<PyCard>>>,
+        royals_available: Vec<PyRoyalCard>,
+        privileges_supply: u32,
+        current_player: usize,
+        winner: Option<usize>,
+        phase: PyPhase,
+        pending_buy: Option<&PyBuyCard>,
+        pending_reserve: Option<&PyReserveCard>,
+        seed: i64,
+        extra_turn: bool,
+        pending_ability: Option<&PyAbility>,
+        pending_royal: bool,
+    ) -> PyResult<Self> {
+        let players: [PlayerState; 2] = players
+            .iter()
+            .map(PlayerState::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("players must have length 2"))?;
+
+        let board: [Option<Color>; 25] = board
+            .into_iter()
+            .map(|c| c.map(|c| c.inner()))
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("board must have length 25"))?;
+
+        let decks: [Vec<Card>; 3] = decks
+            .into_iter()
+            .map(|deck| deck.iter().map(Card::from).collect())
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("decks must have length 3"))?;
+
+        let pyramid: [Vec<Option<Card>>; 3] = pyramid
+            .into_iter()
+            .map(|row| row.iter().map(|c| c.as_ref().map(Card::from)).collect())
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("pyramid must have length 3"))?;
+
         Ok(PyGameState {
-            inner: state_new_game(seed),
+            inner: GameState {
+                players,
+                board,
+                bag: bag.into(),
+                decks,
+                pyramid,
+                royals_available: royals_available.iter().map(RoyalCard::from).collect(),
+                privileges_supply,
+                current_player,
+                winner,
+                phase: phase.inner(),
+                pending_buy: pending_buy.map(BuyCard::from),
+                pending_reserve: pending_reserve.map(ReserveCard::from),
+                extra_turn,
+                pending_ability: pending_ability.map(Ability::from),
+                pending_royal,
+                rng: Rc::new(rng::Random::from_seed(seed)),
+            },
         })
     }
 
@@ -882,7 +1144,11 @@ impl PyGameState {
 
     #[getter]
     fn board(&self) -> Vec<Option<PyColor>> {
-        self.inner.board.iter().map(|c| c.map(PyColor::from_inner)).collect()
+        self.inner
+            .board
+            .iter()
+            .map(|c| c.map(PyColor::from_inner))
+            .collect()
     }
 
     #[getter]

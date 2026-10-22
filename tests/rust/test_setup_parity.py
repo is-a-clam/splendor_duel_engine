@@ -13,9 +13,13 @@ SEEDS = [0, 1, 7, 42, 1234, 2**31, 2**63 - 1]
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_setup_matches(seed: int) -> None:
-    assert state_fingerprint(rust_new_game(seed)) == state_fingerprint(py_new_game(seed))
+    assert state_fingerprint(rust_new_game(seed)) == state_fingerprint(
+        py_new_game(seed)
+    )
 
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_setup_is_reproducible(seed: int) -> None:
-    assert state_fingerprint(rust_new_game(seed)) == state_fingerprint(rust_new_game(seed))
+    assert state_fingerprint(rust_new_game(seed)) == state_fingerprint(
+        rust_new_game(seed)
+    )
