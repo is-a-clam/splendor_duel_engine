@@ -49,9 +49,8 @@ impl Random {
 
     /// CPython's `_randbelow(n)`.
     pub fn randbelow(&mut self, n: u32) -> u32 {
-        if n == 0 {
-            return 0;
-        }
+        // n == 0 is handled by the Python wrapper to raise ValueError
+        // This function assumes n > 0
         let k = n.ilog2() + 1; // n.bit_length()
         loop {
             let r = self.getrandbits(k);

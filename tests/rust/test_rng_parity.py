@@ -74,3 +74,11 @@ def test_copy_continues_the_same_stream_independently() -> None:
         rng.getrandbits(32)
     clone = rng.copy()
     assert clone.getrandbits(32) == rng.getrandbits(32)
+
+
+def test_randbelow_zero_raises() -> None:
+    """CPython's randrange(0) raises ValueError; our randbelow mirrors this."""
+    with pytest.raises(ValueError, match="empty range"):
+        Random(42).randbelow(0)
+    with pytest.raises(ValueError, match="empty range"):
+        random.Random(42).randrange(0)

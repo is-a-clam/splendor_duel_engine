@@ -24,8 +24,13 @@ impl PyRandom {
         self.inner.getrandbits(k)
     }
 
-    fn randbelow(&mut self, n: u32) -> u32 {
-        self.inner.randbelow(n)
+    fn randbelow(&mut self, n: u32) -> PyResult<u32> {
+        if n == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "empty range for randrange()",
+            ));
+        }
+        Ok(self.inner.randbelow(n))
     }
 
     fn randrange(&mut self, n: u32) -> u32 {
