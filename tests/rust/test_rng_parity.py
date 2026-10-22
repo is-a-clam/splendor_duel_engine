@@ -82,3 +82,11 @@ def test_randbelow_zero_raises() -> None:
         Random(42).randbelow(0)
     with pytest.raises(ValueError, match="empty range"):
         random.Random(42).randrange(0)
+
+
+def test_randrange_zero_raises() -> None:
+    """CPython's randrange(0) raises ValueError."""
+    with pytest.raises(ValueError, match="empty range"):
+        Random(42).randrange(0)
+    with pytest.raises(ValueError, match="empty range"):
+        random.Random(42).randrange(0)

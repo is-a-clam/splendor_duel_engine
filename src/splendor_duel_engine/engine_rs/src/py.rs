@@ -33,8 +33,13 @@ impl PyRandom {
         Ok(self.inner.randbelow(n))
     }
 
-    fn randrange(&mut self, n: u32) -> u32 {
-        self.inner.randrange(n)
+    fn randrange(&mut self, n: u32) -> PyResult<u32> {
+        if n == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "empty range for randrange()",
+            ));
+        }
+        Ok(self.inner.randrange(n))
     }
 
     fn shuffle(&mut self, items: &Bound<'_, PyAny>) -> PyResult<()> {
