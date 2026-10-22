@@ -2,8 +2,10 @@
 
 use crate::cards::{Ability, Card, RoyalCard};
 use crate::colors::{Color, Tokens};
+use crate::observation::{observation as state_observation, Observation, PlayerView};
 use crate::phase::Phase;
 use crate::rng;
+use crate::state::{new_game as state_new_game, BuyCard, GameState, PlayerState, PurchasedCard, ReserveCard, ReservedCard};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
@@ -66,7 +68,7 @@ impl PyRandom {
 
 /// Color enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Color", module = "splendor_duel_engine._core")]
+#[pyclass(eq, frozen, name = "Color", module = "splendor_duel_engine._core", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyColor {
     WHITE,
@@ -136,7 +138,7 @@ impl PyColor {
 }
 
 /// Tokens struct wrapper.
-#[pyclass(frozen, eq, name = "Tokens", module = "splendor_duel_engine._core", get_all)]
+#[pyclass(frozen, eq, name = "Tokens", module = "splendor_duel_engine._core", get_all, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PyTokens {
     pub white: u8,
@@ -270,7 +272,7 @@ impl PyTokens {
 
 /// Ability enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Ability", module = "splendor_duel_engine._core")]
+#[pyclass(eq, frozen, name = "Ability", module = "splendor_duel_engine._core", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyAbility {
     EXTRA_TURN,
@@ -329,7 +331,7 @@ impl PyAbility {
 
 /// Phase enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
-#[pyclass(eq, frozen, name = "Phase", module = "splendor_duel_engine._core")]
+#[pyclass(eq, frozen, name = "Phase", module = "splendor_duel_engine._core", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PyPhase {
     USE_PRIVILEGES,
@@ -415,7 +417,7 @@ impl PyPhase {
 }
 
 /// Card wrapper.
-#[pyclass(frozen, eq, name = "Card", module = "splendor_duel_engine._core", get_all)]
+#[pyclass(frozen, eq, name = "Card", module = "splendor_duel_engine._core", get_all, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyCard {
     pub id: String,
@@ -442,6 +444,12 @@ impl From<Card> for PyCard {
             is_multicolor: c.is_multicolor,
             cost: c.cost.into(),
         }
+    }
+}
+
+impl From<&Card> for PyCard {
+    fn from(c: &Card) -> Self {
+        c.clone().into()
     }
 }
 
@@ -487,7 +495,7 @@ impl PyCard {
 }
 
 /// RoyalCard wrapper.
-#[pyclass(frozen, eq, name = "RoyalCard", module = "splendor_duel_engine._core", get_all)]
+#[pyclass(frozen, eq, name = "RoyalCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyRoyalCard {
     pub id: String,
@@ -502,6 +510,12 @@ impl From<RoyalCard> for PyRoyalCard {
             points: r.points,
             ability: r.ability.map(PyAbility::from_inner),
         }
+    }
+}
+
+impl From<&RoyalCard> for PyRoyalCard {
+    fn from(r: &RoyalCard) -> Self {
+        r.clone().into()
     }
 }
 
@@ -523,4 +537,456 @@ impl PyRoyalCard {
             self.id, self.points, self.ability.as_ref().map(|a| a.inner().value())
         )
     }
+}
+
+/// BuyCard wrapper.
+#[pyclass(frozen, eq, name = "BuyCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyBuyCard {
+    pub card: PyCard,
+    pub source: String,
+}
+
+impl From<BuyCard> for PyBuyCard {
+    fn from(b: BuyCard) -> Self {
+        PyBuyCard {
+            card: b.card.into(),
+            source: b.source,
+        }
+    }
+}
+
+#[pymethods]
+impl PyBuyCard {
+    #[new]
+    #[pyo3(signature = (card, source))]
+    fn new(card: &PyCard, source: String) -> Self {
+        PyBuyCard {
+            card: card.clone(),
+            source,
+        }
+    }
+}
+
+/// ReserveCard wrapper.
+#[pyclass(frozen, eq, name = "ReserveCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyReserveCard {
+    pub source: String,
+    pub index: usize,
+}
+
+impl From<ReserveCard> for PyReserveCard {
+    fn from(r: ReserveCard) -> Self {
+        PyReserveCard {
+            source: r.source,
+            index: r.index,
+        }
+    }
+}
+
+#[pymethods]
+impl PyReserveCard {
+    #[new]
+    #[pyo3(signature = (source, index))]
+    fn new(source: String, index: usize) -> Self {
+        PyReserveCard { source, index }
+    }
+}
+
+/// PurchasedCard wrapper.
+#[pyclass(frozen, eq, name = "PurchasedCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyPurchasedCard {
+    pub card: PyCard,
+    pub chosen_color: Option<PyColor>,
+}
+
+impl From<PurchasedCard> for PyPurchasedCard {
+    fn from(p: PurchasedCard) -> Self {
+        PyPurchasedCard {
+            card: p.card.into(),
+            chosen_color: p.chosen_color.map(PyColor::from_inner),
+        }
+    }
+}
+
+#[pymethods]
+impl PyPurchasedCard {
+    #[new]
+    #[pyo3(signature = (card, chosen_color))]
+    fn new(card: &PyCard, chosen_color: Option<&PyColor>) -> Self {
+        PyPurchasedCard {
+            card: card.clone(),
+            chosen_color: chosen_color.cloned(),
+        }
+    }
+}
+
+/// ReservedCard wrapper.
+#[pyclass(frozen, eq, name = "ReservedCard", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyReservedCard {
+    pub card: PyCard,
+    pub from_deck: bool,
+}
+
+impl From<ReservedCard> for PyReservedCard {
+    fn from(r: ReservedCard) -> Self {
+        PyReservedCard {
+            card: r.card.into(),
+            from_deck: r.from_deck,
+        }
+    }
+}
+
+#[pymethods]
+impl PyReservedCard {
+    #[new]
+    #[pyo3(signature = (card, from_deck))]
+    fn new(card: &PyCard, from_deck: bool) -> Self {
+        PyReservedCard {
+            card: card.clone(),
+            from_deck,
+        }
+    }
+}
+
+/// PlayerState wrapper.
+#[pyclass(frozen, eq, name = "PlayerState", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyPlayerState {
+    pub tokens: PyTokens,
+    pub bonus: PyTokens,
+    pub prestige: u32,
+    pub crowns: u32,
+    pub reserved: Vec<PyReservedCard>,
+    pub purchased: Vec<PyPurchasedCard>,
+    pub privileges: u32,
+}
+
+impl From<PlayerState> for PyPlayerState {
+    fn from(p: PlayerState) -> Self {
+        PyPlayerState {
+            tokens: p.tokens.into(),
+            bonus: p.bonus.into(),
+            prestige: p.prestige,
+            crowns: p.crowns,
+            reserved: p.reserved.into_iter().map(PyReservedCard::from).collect(),
+            purchased: p.purchased.into_iter().map(PyPurchasedCard::from).collect(),
+            privileges: p.privileges,
+        }
+    }
+}
+
+#[pymethods]
+impl PyPlayerState {
+    #[new]
+    #[pyo3(signature = (tokens, bonus, prestige, crowns, reserved, purchased, privileges))]
+    fn new(
+        tokens: &PyTokens,
+        bonus: &PyTokens,
+        prestige: u32,
+        crowns: u32,
+        reserved: Vec<PyReservedCard>,
+        purchased: Vec<PyPurchasedCard>,
+        privileges: u32,
+    ) -> Self {
+        PyPlayerState {
+            tokens: tokens.clone(),
+            bonus: bonus.clone(),
+            prestige,
+            crowns,
+            reserved,
+            purchased,
+            privileges,
+        }
+    }
+}
+
+/// PlayerView wrapper.
+#[pyclass(frozen, eq, name = "PlayerView", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyPlayerView {
+    pub tokens: PyTokens,
+    pub bonus: PyTokens,
+    pub prestige: u32,
+    pub crowns: u32,
+    pub reserved_public: Vec<PyCard>,
+    pub reserved_deck_count: usize,
+    pub purchased: Vec<PyPurchasedCard>,
+    pub privileges: u32,
+}
+
+impl From<PlayerView> for PyPlayerView {
+    fn from(v: PlayerView) -> Self {
+        PyPlayerView {
+            tokens: v.tokens.into(),
+            bonus: v.bonus.into(),
+            prestige: v.prestige,
+            crowns: v.crowns,
+            reserved_public: v.reserved_public.into_iter().map(PyCard::from).collect(),
+            reserved_deck_count: v.reserved_deck_count,
+            purchased: v.purchased.into_iter().map(PyPurchasedCard::from).collect(),
+            privileges: v.privileges,
+        }
+    }
+}
+
+#[pymethods]
+impl PyPlayerView {
+    #[new]
+    #[pyo3(signature = (tokens, bonus, prestige, crowns, reserved_public, reserved_deck_count, purchased, privileges))]
+    fn new(
+        tokens: &PyTokens,
+        bonus: &PyTokens,
+        prestige: u32,
+        crowns: u32,
+        reserved_public: Vec<PyCard>,
+        reserved_deck_count: usize,
+        purchased: Vec<PyPurchasedCard>,
+        privileges: u32,
+    ) -> Self {
+        PyPlayerView {
+            tokens: tokens.clone(),
+            bonus: bonus.clone(),
+            prestige,
+            crowns,
+            reserved_public,
+            reserved_deck_count,
+            purchased,
+            privileges,
+        }
+    }
+}
+
+/// Observation wrapper.
+#[pyclass(frozen, eq, name = "Observation", module = "splendor_duel_engine._core", get_all, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyObservation {
+    pub you: PyPlayerView,
+    pub opponent: PyPlayerView,
+    pub board: Vec<Option<PyColor>>,
+    pub pyramid: Vec<Vec<Option<PyCard>>>,
+    pub royals_available: Vec<PyRoyalCard>,
+    pub privileges_supply: u32,
+    pub deck_counts: (usize, usize, usize),
+    pub bag: PyTokens,
+    pub current_player: usize,
+    pub winner: Option<usize>,
+    pub your_reserved_deck: Vec<PyCard>,
+    pub phase: PyPhase,
+    pub pending_buy: Option<PyBuyCard>,
+    pub pending_reserve: Option<PyReserveCard>,
+    pub pending_ability: Option<PyAbility>,
+    pub pending_royal: bool,
+    pub extra_turn: bool,
+}
+
+impl From<Observation> for PyObservation {
+    fn from(o: Observation) -> Self {
+        PyObservation {
+            you: o.you.into(),
+            opponent: o.opponent.into(),
+            board: o.board.iter().map(|c| c.map(PyColor::from_inner)).collect(),
+            pyramid: o
+                .pyramid
+                .iter()
+                .map(|row| row.iter().map(|c| c.as_ref().map(PyCard::from)).collect())
+                .collect(),
+            royals_available: o.royals_available.into_iter().map(PyRoyalCard::from).collect(),
+            privileges_supply: o.privileges_supply,
+            deck_counts: (o.deck_counts[0], o.deck_counts[1], o.deck_counts[2]),
+            bag: o.bag.into(),
+            current_player: o.current_player,
+            winner: o.winner,
+            your_reserved_deck: o.your_reserved_deck.into_iter().map(PyCard::from).collect(),
+            phase: PyPhase::from_inner(o.phase),
+            pending_buy: o.pending_buy.map(PyBuyCard::from),
+            pending_reserve: o.pending_reserve.map(PyReserveCard::from),
+            pending_ability: o.pending_ability.map(PyAbility::from_inner),
+            pending_royal: o.pending_royal,
+            extra_turn: o.extra_turn,
+        }
+    }
+}
+
+#[pymethods]
+impl PyObservation {
+    #[new]
+    #[pyo3(signature = (you, opponent, board, pyramid, royals_available, privileges_supply, deck_counts, bag, current_player, winner, your_reserved_deck, phase, pending_buy, pending_reserve, pending_ability, pending_royal, extra_turn))]
+    fn new(
+        you: &PyPlayerView,
+        opponent: &PyPlayerView,
+        board: Vec<Option<PyColor>>,
+        pyramid: Vec<Vec<Option<PyCard>>>,
+        royals_available: Vec<PyRoyalCard>,
+        privileges_supply: u32,
+        deck_counts: (usize, usize, usize),
+        bag: &PyTokens,
+        current_player: usize,
+        winner: Option<usize>,
+        your_reserved_deck: Vec<PyCard>,
+        phase: PyPhase,
+        pending_buy: Option<&PyBuyCard>,
+        pending_reserve: Option<&PyReserveCard>,
+        pending_ability: Option<&PyAbility>,
+        pending_royal: bool,
+        extra_turn: bool,
+    ) -> Self {
+        PyObservation {
+            you: you.clone(),
+            opponent: opponent.clone(),
+            board,
+            pyramid,
+            royals_available,
+            privileges_supply,
+            deck_counts,
+            bag: bag.clone(),
+            current_player,
+            winner,
+            your_reserved_deck,
+            phase,
+            pending_buy: pending_buy.cloned(),
+            pending_reserve: pending_reserve.cloned(),
+            pending_ability: pending_ability.cloned(),
+            pending_royal,
+            extra_turn,
+        }
+    }
+}
+
+/// GameState wrapper.
+#[pyclass(unsendable, name = "GameState", module = "splendor_duel_engine._core")]
+pub struct PyGameState {
+    pub inner: GameState,
+}
+
+#[pymethods]
+impl PyGameState {
+    #[new]
+    #[pyo3(signature = (seed))]
+    fn new(seed: i64) -> PyResult<Self> {
+        Ok(PyGameState {
+            inner: state_new_game(seed),
+        })
+    }
+
+    #[getter]
+    fn players(&self) -> [PyPlayerState; 2] {
+        [
+            self.inner.players[0].clone().into(),
+            self.inner.players[1].clone().into(),
+        ]
+    }
+
+    #[getter]
+    fn board(&self) -> Vec<Option<PyColor>> {
+        self.inner.board.iter().map(|c| c.map(PyColor::from_inner)).collect()
+    }
+
+    #[getter]
+    fn bag(&self) -> PyTokens {
+        self.inner.bag.into()
+    }
+
+    #[getter]
+    fn decks(&self) -> Vec<Vec<PyCard>> {
+        self.inner
+            .decks
+            .iter()
+            .map(|d| d.iter().map(PyCard::from).collect())
+            .collect()
+    }
+
+    #[getter]
+    fn pyramid(&self) -> Vec<Vec<Option<PyCard>>> {
+        self.inner
+            .pyramid
+            .iter()
+            .map(|row| row.iter().map(|c| c.as_ref().map(PyCard::from)).collect())
+            .collect()
+    }
+
+    #[getter]
+    fn royals_available(&self) -> Vec<PyRoyalCard> {
+        self.inner
+            .royals_available
+            .iter()
+            .map(PyRoyalCard::from)
+            .collect()
+    }
+
+    #[getter]
+    fn privileges_supply(&self) -> u32 {
+        self.inner.privileges_supply
+    }
+
+    #[getter]
+    fn current_player(&self) -> usize {
+        self.inner.current_player
+    }
+
+    #[getter]
+    fn winner(&self) -> Option<usize> {
+        self.inner.winner
+    }
+
+    #[getter]
+    fn phase(&self) -> PyPhase {
+        PyPhase::from_inner(self.inner.phase)
+    }
+
+    #[getter]
+    fn pending_buy(&self) -> Option<PyBuyCard> {
+        self.inner.pending_buy.clone().map(PyBuyCard::from)
+    }
+
+    #[getter]
+    fn pending_reserve(&self) -> Option<PyReserveCard> {
+        self.inner.pending_reserve.clone().map(PyReserveCard::from)
+    }
+
+    #[getter]
+    fn extra_turn(&self) -> bool {
+        self.inner.extra_turn
+    }
+
+    #[getter]
+    fn pending_ability(&self) -> Option<PyAbility> {
+        self.inner.pending_ability.map(PyAbility::from_inner)
+    }
+
+    #[getter]
+    fn pending_royal(&self) -> bool {
+        self.inner.pending_royal
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "GameState(current_player={}, phase={:?}, winner={:?})",
+            self.inner.current_player,
+            self.inner.phase.value(),
+            self.inner.winner
+        )
+    }
+}
+
+/// Create a fresh game set up deterministically from `seed`.
+#[pyfunction]
+pub fn new_game(seed: i64) -> PyGameState {
+    PyGameState {
+        inner: state_new_game(seed),
+    }
+}
+
+/// Create an observation from a GameState for a specific player.
+#[pyfunction]
+pub fn observation(state: &PyGameState, player: usize) -> PyResult<PyObservation> {
+    if player > 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "player must be 0 or 1",
+        ));
+    }
+    Ok(state_observation(&state.inner, player).into())
 }

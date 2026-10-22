@@ -1,7 +1,6 @@
 //! Card data and types.
 
 use crate::colors::{Color, Tokens, GEM_COLORS};
-use crate::phase::Phase;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;

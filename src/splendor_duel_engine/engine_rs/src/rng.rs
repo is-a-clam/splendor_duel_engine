@@ -8,6 +8,7 @@ use mt19937::MT19937;
 use rand_core::Rng;
 
 /// The CPython-compatible generator.
+#[derive(Debug)]
 pub struct Random {
     inner: MT19937,
 }
