@@ -37,7 +37,7 @@ def test_pyramid_reserved_is_public():
     base_st = new_game(0)
     # Get a pyramid card
     pyramid_card = base_st.pyramid[2][0]  # a level 1 card from bottom row
-    assert(pyramid_card is not None)
+    assert pyramid_card is not None
     p1 = replace(
         base_st.players[1], reserved=(ReservedCard(card=pyramid_card, from_deck=False),)
     )

@@ -8,6 +8,7 @@ reference.
 
 from __future__ import annotations
 
+import dataclasses
 import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -122,6 +123,90 @@ class GameState:
     #: deferred because the card was multicolor (its color must be chosen
     #: first). Cleared when the royal step runs in ``_end_of_turn``.
     pending_royal: bool = False
+
+    # ===== State update methods =====
+
+    def replace_player(self, player_idx: int, new_player: PlayerState) -> GameState:
+        """Replace one player in the players tuple."""
+        new_players = list(self.players)
+        new_players[player_idx] = new_player
+        return dataclasses.replace(self, players=(new_players[0], new_players[1]))
+
+    def update_board(self, idx: int, new_color: Color | None) -> GameState:
+        """Update a single board index."""
+        board = list(self.board)
+        board[idx] = new_color
+        return dataclasses.replace(self, board=tuple(board))
+
+    def remove_from_board(self, idx: int) -> GameState:
+        """Set a board index to None (remove token)."""
+        board = list(self.board)
+        board[idx] = None
+        return dataclasses.replace(self, board=tuple(board))
+
+    def add_to_bag(self, tokens: Tokens) -> GameState:
+        """Add tokens to bag."""
+        new_bag_dict = {c.value: self.bag.count(c) + tokens.count(c) for c in Color}
+        return dataclasses.replace(self, bag=Tokens(**new_bag_dict))
+
+    def pop_deck(self, deck_idx: int) -> tuple[Card, GameState]:
+        """Pop top card from deck and return (card, new_state)."""
+        new_decks = [list(d) for d in self.decks]
+        card = new_decks[deck_idx].pop()
+        new_state = dataclasses.replace(self, decks=tuple(tuple(d) for d in new_decks))
+        return card, new_state
+
+    def take_pyramid_card(
+        self, row_idx: int, col_idx: int
+    ) -> tuple[Card | None, GameState]:
+        """Take card from pyramid slot and refill from corresponding deck in one atomic operation.
+
+        Returns (card, new_state). If the corresponding deck is empty, the slot stays empty.
+        """
+        new_pyramid = [list(r) for r in self.pyramid]
+        new_decks = [list(d) for d in self.decks]
+
+        card = new_pyramid[row_idx][col_idx]
+        new_pyramid[row_idx][col_idx] = None
+
+        # Refill from corresponding deck
+        deck = new_decks[row_idx]
+        if deck:
+            new_pyramid[row_idx][col_idx] = deck.pop()
+
+        new_state = dataclasses.replace(
+            self,
+            pyramid=tuple(tuple(r) for r in new_pyramid),
+            decks=tuple(tuple(d) for d in new_decks),
+        )
+        return card, new_state
+
+    def grant_privilege(self, recipient: int) -> GameState:
+        """Grant 1 privilege to recipient from supply, or steal from other player."""
+        other = 1 - recipient
+        new_players = [self.players[0], self.players[1]]
+        new_supply = self.privileges_supply
+        if new_supply > 0:
+            new_supply = self.privileges_supply - 1
+            new_players[recipient] = dataclasses.replace(
+                self.players[recipient],
+                privileges=self.players[recipient].privileges + 1,
+            )
+        else:
+            # Steal from other player
+            if self.players[other].privileges > 0:
+                new_players[other] = dataclasses.replace(
+                    self.players[other], privileges=self.players[other].privileges - 1
+                )
+                new_players[recipient] = dataclasses.replace(
+                    self.players[recipient],
+                    privileges=self.players[recipient].privileges + 1,
+                )
+        return dataclasses.replace(
+            self,
+            players=(new_players[0], new_players[1]),
+            privileges_supply=new_supply,
+        )
 
 
 def new_game(seed: int) -> GameState:

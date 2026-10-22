@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import random
 
-from splendor_duel_engine.mcts.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import (
     ChooseGold,
     DoneWithPrivileges,
@@ -18,6 +17,7 @@ from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import new_game
+from splendor_duel_engine.mcts.mcts_determinize import determinize
 
 
 def _advance_to_mandatory(state):

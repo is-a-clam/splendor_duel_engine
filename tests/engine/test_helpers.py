@@ -14,11 +14,12 @@ from splendor_duel_engine.engine.helpers import (
     color_points,
     cost_deficits,
     discard_subsets,
+    is_winner,
     legal_payments,
     take_penalty,
     visible_cards,
 )
-from splendor_duel_engine.engine.state import PurchasedCard
+from splendor_duel_engine.engine.state import PlayerState, PurchasedCard
 
 
 def make_card(
@@ -314,3 +315,103 @@ def test_legal_payments_gold_always_equals_the_cost_deficits_it_leaves_open():
             assert payment.gold == sum(
                 cost_deficits(card.cost, bonus, payment).values()
             )
+
+
+# --- is_winner -----------------------------------------------------------
+
+
+def _make_player(
+    prestige: int = 0,
+    crowns: int = 0,
+    purchased: tuple[PurchasedCard, ...] = (),
+    tokens: Tokens | None = None,
+) -> PlayerState:
+    """Build a minimal player state for winner tests."""
+    return PlayerState(
+        tokens=tokens if tokens is not None else Tokens(),
+        bonus=Tokens(),
+        prestige=prestige,
+        crowns=crowns,
+        reserved=(),
+        purchased=purchased,
+        privileges=0,
+    )
+
+
+def test_is_winner_prestige_win():
+    player = _make_player(prestige=20)
+    assert is_winner(player) is True
+
+    player = _make_player(prestige=19)
+    assert is_winner(player) is False
+
+
+def test_is_winner_crowns_win():
+    player = _make_player(crowns=10)
+    assert is_winner(player) is True
+
+    player = _make_player(crowns=9)
+    assert is_winner(player) is False
+
+
+def test_is_winner_color_win():
+    purchased = (
+        PurchasedCard(
+            card=make_card("C1", points=5, bonus=Color.WHITE), chosen_color=None
+        ),
+        PurchasedCard(
+            card=make_card("C2", points=5, bonus=Color.WHITE), chosen_color=None
+        ),
+    )
+    player = _make_player(purchased=purchased)
+    assert is_winner(player) is True
+
+
+def test_is_winner_color_win_with_multicolor():
+    purchased = (
+        PurchasedCard(
+            card=make_card("M1", points=5, is_multicolor=True, bonus_count=1),
+            chosen_color=Color.WHITE,
+        ),
+        PurchasedCard(
+            card=make_card("C2", points=5, bonus=Color.WHITE), chosen_color=None
+        ),
+    )
+    player = _make_player(purchased=purchased)
+    assert is_winner(player) is True
+
+
+def test_is_winner_multicolor_not_counted_without_chosen_color():
+    purchased = (
+        PurchasedCard(
+            card=make_card("M1", points=5, is_multicolor=True, bonus_count=1),
+            chosen_color=None,  # Not chosen yet
+        ),
+    )
+    player = _make_player(purchased=purchased)
+    assert is_winner(player) is False
+
+
+def test_is_winner_color_win_only_counts_card_points_not_bonus():
+    purchased = (
+        PurchasedCard(
+            card=make_card("C1", points=5, bonus=Color.WHITE), chosen_color=None
+        ),
+    )
+    # Player has bonus tokens (from other cards), but only card points count
+    player = PlayerState(
+        tokens=Tokens(),
+        bonus=Tokens(white=5),  # 5 bonus tokens in white
+        prestige=5,
+        crowns=0,
+        reserved=(),
+        purchased=purchased,
+        privileges=0,
+    )
+    # Only 5 card points in white, not 10 (bonus tokens don't count)
+    assert is_winner(player) is False
+
+
+def test_is_winner_no_win():
+    player = _make_player(prestige=15, crowns=5)
+    assert is_winner(player) is False

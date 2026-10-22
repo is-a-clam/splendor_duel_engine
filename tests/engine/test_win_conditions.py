@@ -11,6 +11,7 @@ picks and discard, and ends the game immediately:
 
 from dataclasses import replace
 
+from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.actions import (
     BuyCard,
     ChooseMulticolor,
@@ -18,7 +19,6 @@ from splendor_duel_engine.engine.actions import (
     PayTokens,
     apply,
     decide,
-    winner_of,
 )
 from splendor_duel_engine.engine.cards import Ability, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
@@ -104,7 +104,7 @@ def test_win_at_10_crowns():
         current_player=0,
         players=(_player(crowns=10, prestige=1), _player()),
     )
-    assert winner_of(st) == 0
+    assert helpers.is_winner(st.players[0]) is True
 
 
 def test_win_at_10_points_in_one_color():
@@ -126,7 +126,7 @@ def test_win_at_10_points_in_one_color():
         ),
     )
     # 4 + 3 + 2 + 3 = 12 red points; well over 10.
-    assert winner_of(st) == 0
+    assert helpers.is_winner(st.players[0]) is True
     assert st.players[0].prestige < 20  # not a 20-point win
 
 
@@ -143,14 +143,14 @@ def test_multicolor_counts_only_for_its_chosen_color():
     red_chosen = board_state(
         current_player=0, players=(_player(purchased=pieces), _player())
     )
-    assert winner_of(red_chosen) == 0
+    assert helpers.is_winner(red_chosen.players[0]) is True
 
     blue_chosen_pieces = pieces[:-1] + (_purchased("L3-01", Color.BLUE),)
     blue_chosen = board_state(
         current_player=0, players=(_player(purchased=blue_chosen_pieces), _player())
     )
     # 9 red and 3 blue: neither reaches 10.
-    assert winner_of(blue_chosen) is None
+    assert helpers.is_winner(blue_chosen.players[0]) is False
 
 
 def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
@@ -171,7 +171,9 @@ def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
             _player(),
         ),
     )
-    assert winner_of(st) is None  # 9 black, not 10; 15 prestige, not 20
+    assert (
+        helpers.is_winner(st.players[0]) is False
+    )  # 9 black, not 10; 15 prestige, not 20
 
     # Add a royal (3 points, colorless): prestige 18, still no colour win.
     with_royal = replace(
@@ -181,7 +183,7 @@ def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
             st.players[1],
         ),
     )
-    assert winner_of(with_royal) is None
+    assert helpers.is_winner(with_royal.players[0]) is False
 
     # Pushing prestige to 20 with colorless/royal points *does* win.
     to_20 = replace(
@@ -191,7 +193,7 @@ def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
             st.players[1],
         ),
     )
-    assert winner_of(to_20) == 0
+    assert helpers.is_winner(to_20.players[0]) is True
 
 
 def test_game_ends_immediately_no_opponent_final_turn():
@@ -271,6 +273,6 @@ def test_no_endgame_bonus_scoring():
         privileges=3,
     )
     st = board_state(current_player=0, players=(rich, _player()))
-    assert winner_of(st) == 0
+    assert helpers.is_winner(st.players[0]) is True
     # The winning player's score is exactly their prestige, not the token count.
     assert st.players[0].prestige == 20

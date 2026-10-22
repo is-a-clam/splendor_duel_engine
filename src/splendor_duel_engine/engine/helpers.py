@@ -14,7 +14,7 @@ from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 
 if TYPE_CHECKING:
     from splendor_duel_engine.engine.cards import Card
-    from splendor_duel_engine.engine.state import PurchasedCard
+    from splendor_duel_engine.engine.state import PlayerState, PurchasedCard
 
 #: Token limit at end of turn (spec §End of turn and victory).
 TOKEN_LIMIT: int = 10
@@ -254,3 +254,19 @@ def visible_cards(
     result.extend(reserved_public)
     result.extend(reserved_deck)
     return result
+
+
+def is_winner(player: PlayerState) -> bool:
+    """Return True if this player meets any win condition.
+
+    Checked at end of their turn. Any one of:
+      - prestige >= PRESTIGE_WIN (20)
+      - crowns >= CROWNS_WIN (10)
+      - >= COLOR_WIN_POINTS (10) prestige in a single gem color
+    """
+    if player.prestige >= PRESTIGE_WIN or player.crowns >= CROWNS_WIN:
+        return True
+    for color in GEM_COLORS:
+        if color_points(player.purchased, color) >= COLOR_WIN_POINTS:
+            return True
+    return False
