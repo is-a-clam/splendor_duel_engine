@@ -1,6 +1,6 @@
 //! PyO3 wrapper types.
 
-use crate::actions::{decide as actions_decide, Action};
+use crate::actions::{apply as actions_apply, decide as actions_decide, Action};
 use crate::cards::{Ability, Card, RoyalCard};
 use crate::colors::{Color, Tokens};
 use crate::helpers as rule_helpers;
@@ -1369,7 +1369,8 @@ pub fn observation(state: &PyGameState, player: usize) -> PyResult<PyObservation
     hash,
     name = "UsePrivilege",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyUsePrivilege {
@@ -1395,7 +1396,8 @@ impl PyUsePrivilege {
     eq,
     hash,
     name = "DoneWithPrivileges",
-    module = "splendor_duel_engine._core"
+    module = "splendor_duel_engine._core",
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyDoneWithPrivileges {}
@@ -1418,7 +1420,8 @@ impl PyDoneWithPrivileges {
     eq,
     hash,
     name = "Replenish",
-    module = "splendor_duel_engine._core"
+    module = "splendor_duel_engine._core",
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyReplenish {}
@@ -1441,7 +1444,8 @@ impl PyReplenish {
     eq,
     hash,
     name = "DoneWithReplenish",
-    module = "splendor_duel_engine._core"
+    module = "splendor_duel_engine._core",
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyDoneWithReplenish {}
@@ -1465,7 +1469,8 @@ impl PyDoneWithReplenish {
     hash,
     name = "TakeTokens",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyTakeTokens {
@@ -1492,7 +1497,8 @@ impl PyTakeTokens {
     hash,
     name = "PayTokens",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyPayTokens {
@@ -1519,7 +1525,8 @@ impl PyPayTokens {
     hash,
     name = "ChooseGold",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyChooseGold {
@@ -1546,7 +1553,8 @@ impl PyChooseGold {
     hash,
     name = "ChooseMulticolor",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyChooseMulticolor {
@@ -1573,7 +1581,8 @@ impl PyChooseMulticolor {
     hash,
     name = "ChooseStealToken",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyChooseStealToken {
@@ -1600,7 +1609,8 @@ impl PyChooseStealToken {
     hash,
     name = "ChooseMatchingToken",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyChooseMatchingToken {
@@ -1627,7 +1637,8 @@ impl PyChooseMatchingToken {
     hash,
     name = "ChooseRoyal",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyChooseRoyal {
@@ -1654,7 +1665,8 @@ impl PyChooseRoyal {
     hash,
     name = "DiscardTokens",
     module = "splendor_duel_engine._core",
-    get_all
+    get_all,
+    from_py_object
 )]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PyDiscardTokens {
@@ -1749,6 +1761,90 @@ fn action_to_py(py: Python<'_>, action: Action) -> PyResult<Py<PyAny>> {
         )?
         .into_any(),
     })
+}
+
+/// Convert a Python action object into the Rust `Action`, if it is one of the
+/// fourteen action wrapper classes.
+fn try_from_action(obj: &Bound<'_, PyAny>) -> Result<Action, ()> {
+    if let Ok(action) = obj.extract::<PyUsePrivilege>() {
+        return Ok(Action::UsePrivilege {
+            index: action.index,
+        });
+    }
+    if obj.extract::<PyDoneWithPrivileges>().is_ok() {
+        return Ok(Action::DoneWithPrivileges);
+    }
+    if obj.extract::<PyReplenish>().is_ok() {
+        return Ok(Action::Replenish);
+    }
+    if obj.extract::<PyDoneWithReplenish>().is_ok() {
+        return Ok(Action::DoneWithReplenish);
+    }
+    if let Ok(action) = obj.extract::<PyTakeTokens>() {
+        return Ok(Action::TakeTokens { line: action.line });
+    }
+    if let Ok(action) = obj.extract::<PyBuyCard>() {
+        return Ok(Action::BuyCard(BuyCard::from(&action)));
+    }
+    if let Ok(action) = obj.extract::<PyPayTokens>() {
+        return Ok(Action::PayTokens {
+            payment: (&action.payment).into(),
+        });
+    }
+    if let Ok(action) = obj.extract::<PyReserveCard>() {
+        return Ok(Action::ReserveCard(ReserveCard::from(&action)));
+    }
+    if let Ok(action) = obj.extract::<PyChooseGold>() {
+        return Ok(Action::ChooseGold {
+            index: action.index,
+        });
+    }
+    if let Ok(action) = obj.extract::<PyChooseMulticolor>() {
+        return Ok(Action::ChooseMulticolor {
+            color: action.color.inner(),
+        });
+    }
+    if let Ok(action) = obj.extract::<PyChooseStealToken>() {
+        return Ok(Action::ChooseStealToken {
+            color: action.color.inner(),
+        });
+    }
+    if let Ok(action) = obj.extract::<PyChooseMatchingToken>() {
+        return Ok(Action::ChooseMatchingToken {
+            index: action.index,
+        });
+    }
+    if let Ok(action) = obj.extract::<PyChooseRoyal>() {
+        return Ok(Action::ChooseRoyal {
+            royal_id: action.royal_id,
+        });
+    }
+    if let Ok(action) = obj.extract::<PyDiscardTokens>() {
+        return Ok(Action::DiscardTokens {
+            tokens: (&action.tokens).into(),
+        });
+    }
+    Err(())
+}
+
+/// Apply an action, returning a new state. Never mutates `state`.
+#[pyfunction]
+pub fn apply(state: &PyGameState, action: &Bound<'_, PyAny>) -> PyResult<PyGameState> {
+    let action = match try_from_action(action) {
+        Ok(action) => action,
+        Err(()) => {
+            // Python's `apply` validates the decision point before it looks at
+            // the action object, so a finished game reports "game is over"
+            // even for an unrecognised action.
+            if let Err(err) = actions_decide(&state.inner) {
+                return Err(pyo3::exceptions::PyValueError::new_err(err));
+            }
+            return Err(pyo3::exceptions::PyValueError::new_err("illegal action"));
+        }
+    };
+    let inner =
+        actions_apply(&state.inner, action).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    Ok(PyGameState { inner })
 }
 
 /// Return the legal actions for the state's current phase.
