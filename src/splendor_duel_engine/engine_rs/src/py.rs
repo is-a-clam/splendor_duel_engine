@@ -2,6 +2,7 @@
 
 use crate::cards::{Ability, Card, RoyalCard};
 use crate::colors::{Color, Tokens};
+use crate::helpers as rule_helpers;
 use crate::observation::{observation as state_observation, Observation, PlayerView};
 use crate::phase::Phase;
 use crate::rng;
@@ -10,7 +11,7 @@ use crate::state::{
     ReservedCard,
 };
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 use std::rc::Rc;
 
 #[pyclass(name = "Random", module = "splendor_duel_engine._core")]
@@ -74,6 +75,7 @@ impl PyRandom {
 #[allow(non_camel_case_types)]
 #[pyclass(
     eq,
+    hash,
     frozen,
     name = "Color",
     module = "splendor_duel_engine._core",
@@ -1244,6 +1246,99 @@ pub fn new_game(seed: i64) -> PyGameState {
     PyGameState {
         inner: state_new_game(seed),
     }
+}
+
+/// Report missing tokens per colour after bonuses and payment.
+///
+/// Returns an insertion-ordered `dict[Color, int]`: gem colours in
+/// `GEM_COLORS` order, then pearl, and only colours with a positive shortfall.
+#[pyfunction]
+pub fn cost_deficits<'py>(
+    py: Python<'py>,
+    cost: &PyTokens,
+    bonus: &PyTokens,
+    paid: &PyTokens,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for (colour, missing) in
+        rule_helpers::cost_deficits((*cost).into(), (*bonus).into(), (*paid).into())
+    {
+        dict.set_item(PyColor::from_inner(colour), missing)?;
+    }
+    Ok(dict)
+}
+
+/// Return whether the player may buy this card right now.
+#[pyfunction]
+pub fn can_afford_card(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> bool {
+    rule_helpers::can_afford_card(&Card::from(card), (*tokens).into(), (*bonus).into())
+}
+
+/// Enumerate legal payments for buying `card`, in the pinned loop order.
+#[pyfunction]
+pub fn legal_payments(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> Vec<PyTokens> {
+    rule_helpers::legal_payments(&Card::from(card), (*tokens).into(), (*bonus).into())
+        .into_iter()
+        .map(PyTokens::from)
+        .collect()
+}
+
+/// Return true if taking these colours triggers a penalty.
+#[pyfunction]
+pub fn take_penalty(colors: Vec<PyColor>) -> bool {
+    let colors: Vec<Color> = colors.iter().map(PyColor::inner).collect();
+    rule_helpers::take_penalty(&colors)
+}
+
+/// Sum card points for purchased cards of effective colour `color`.
+#[pyfunction]
+pub fn color_points(purchased: Vec<PyPurchasedCard>, color: &PyColor) -> u32 {
+    let purchased: Vec<PurchasedCard> = purchased.iter().map(PurchasedCard::from).collect();
+    rule_helpers::color_points(&purchased, color.inner())
+}
+
+/// Enumerate distinct discard subsets of `tokens` summing to `excess`.
+#[pyfunction]
+pub fn discard_subsets(tokens: &PyTokens, excess: i64) -> Vec<PyTokens> {
+    rule_helpers::discard_subsets((*tokens).into(), excess)
+        .into_iter()
+        .map(PyTokens::from)
+        .collect()
+}
+
+/// Return true if the player may reserve a card.
+#[pyfunction]
+pub fn can_reserve(board: Vec<Option<PyColor>>, reserved_count: i64) -> bool {
+    let board: Vec<Option<Color>> = board
+        .into_iter()
+        .map(|colour| colour.map(|c| c.inner()))
+        .collect();
+    rule_helpers::can_reserve(&board, reserved_count)
+}
+
+/// Return all visible cards in contract order.
+#[pyfunction]
+pub fn visible_cards(
+    pyramid: Vec<Vec<Option<PyCard>>>,
+    reserved_public: Vec<PyCard>,
+    reserved_deck: Vec<PyCard>,
+) -> Vec<PyCard> {
+    let pyramid: Vec<Vec<Option<Card>>> = pyramid
+        .iter()
+        .map(|row| row.iter().map(|c| c.as_ref().map(Card::from)).collect())
+        .collect();
+    let reserved_public: Vec<Card> = reserved_public.iter().map(Card::from).collect();
+    let reserved_deck: Vec<Card> = reserved_deck.iter().map(Card::from).collect();
+    rule_helpers::visible_cards(&pyramid, &reserved_public, &reserved_deck)
+        .iter()
+        .map(PyCard::from)
+        .collect()
+}
+
+/// Return true if this player meets any win condition.
+#[pyfunction]
+pub fn is_winner(player: &PyPlayerState) -> bool {
+    rule_helpers::is_winner(&PlayerState::from(player))
 }
 
 /// Create an observation from a GameState for a specific player.
