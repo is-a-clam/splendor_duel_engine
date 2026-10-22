@@ -218,13 +218,13 @@ impl PyTokens {
 
     fn __add__(&self, other: &PyTokens) -> PyTokens {
         PyTokens {
-            white: self.white + other.white,
-            blue: self.blue + other.blue,
-            green: self.green + other.green,
-            red: self.red + other.red,
-            black: self.black + other.black,
-            pearl: self.pearl + other.pearl,
-            gold: self.gold + other.gold,
+            white: self.white.wrapping_add(other.white),
+            blue: self.blue.wrapping_add(other.blue),
+            green: self.green.wrapping_add(other.green),
+            red: self.red.wrapping_add(other.red),
+            black: self.black.wrapping_add(other.black),
+            pearl: self.pearl.wrapping_add(other.pearl),
+            gold: self.gold.wrapping_add(other.gold),
         }
     }
 
@@ -245,6 +245,10 @@ impl PyTokens {
             "Tokens(white={}, blue={}, green={}, red={}, black={}, pearl={}, gold={})",
             self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold
         )
+    }
+
+    fn __str__(&self) -> String {
+        self.__repr__()
     }
 
     fn __hash__(&self) -> isize {

@@ -110,22 +110,23 @@ impl Tokens {
             + self.gold
     }
 
-    /// Plain addition of two Tokens.
-    pub fn add(&self, other: Tokens) -> Tokens {
+    /// Plain addition of two Tokens. Uses wrapping_add to match Python's
+    /// unbounded integer addition (no panic on overflow in debug builds).
+    pub fn add_tokens(&self, other: Tokens) -> Tokens {
         Tokens {
-            white: self.white + other.white,
-            blue: self.blue + other.blue,
-            green: self.green + other.green,
-            red: self.red + other.red,
-            black: self.black + other.black,
-            pearl: self.pearl + other.pearl,
-            gold: self.gold + other.gold,
+            white: self.white.wrapping_add(other.white),
+            blue: self.blue.wrapping_add(other.blue),
+            green: self.green.wrapping_add(other.green),
+            red: self.red.wrapping_add(other.red),
+            black: self.black.wrapping_add(other.black),
+            pearl: self.pearl.wrapping_add(other.pearl),
+            gold: self.gold.wrapping_add(other.gold),
         }
     }
 
     /// Plain subtraction of two Tokens. Does NOT saturate - can underflow.
     /// Matches Python's `Tokens.__sub__` behavior.
-    pub fn sub(&self, other: Tokens) -> Tokens {
+    pub fn sub_tokens(&self, other: Tokens) -> Tokens {
         Tokens {
             white: self.white.wrapping_sub(other.white),
             blue: self.blue.wrapping_sub(other.blue),
@@ -165,14 +166,14 @@ impl fmt::Display for Tokens {
 impl std::ops::Add for Tokens {
     type Output = Tokens;
     fn add(self, other: Tokens) -> Tokens {
-        self.add(other)
+        self.add_tokens(other)
     }
 }
 
 impl std::ops::Sub for Tokens {
     type Output = Tokens;
     fn sub(self, other: Tokens) -> Tokens {
-        self.sub(other)
+        self.sub_tokens(other)
     }
 }
 
