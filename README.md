@@ -1,30 +1,18 @@
 # Splendor Duel Engine
 
-A deterministic, pure-Python implementation of **Splendor Duel** (the two-player variant of Splendor), with a pluggable agent framework for AI research.
-
-## Overview
-
-This project provides:
-
-- **Game Engine** — Full rules implementation with deterministic state transitions, legal action masks at every decision point, and explicit hidden-information modeling (face-down deck cards, opponent reserved cards, bag contents).
-- **Agent Framework** — A minimal `Agent` protocol (`choose_action(observation, legal_actions)`) with three baseline agents:
-  - `RandomAgent(seed)` — uniformly samples legal actions (seeded for reproducibility)
-  - `GreedyAgent()` — deterministic heuristic rules per decision phase
-  - `HumanAgent(input_fn, print_fn)` — terminal-based human player (injectable I/O for tests)
-- **Evaluation Harness** — `play_game()` runs full games between any two agents; `play_match()` runs head-to-head batches with alternating seats.
-- **Rule Helpers** — `src/splendor_duel_engine/engine/helpers.py` exposes the public rule queries (`cost_deficits`, `can_afford_card`, `legal_payments`, `take_penalty`, `color_points`, `discard_subsets`, `can_reserve`, `visible_cards`) and the rule constants (`TOKEN_LIMIT`, `MAX_RESERVED`, `PRESTIGE_WIN`, `CROWNS_WIN`, `COLOR_WIN_POINTS`). They contain no heuristics and are the API contract documented in `docs/specs/engine-api.md`, which the planned Rust port mirrors.
-- **CLI Tools** — Arena for agent-vs-agent matches; terminal play vs. an agent.
+A bot that plays the game _Splendor Duel_ created with Monte-Carlo Tree Search and AlphaGo style self-play. Includes a cli-interface to play with agents and an arena evaluation framework.
 
 ## Architecture
 
 ```
 src/splendor_duel_engine/
-  engine/      Game rules, state, rule helpers (helpers.py), legal move
-               generation (pure Python reference)
-  agents/      Agent protocol, RandomAgent, GreedyAgent
+  engine/      Game rules, state, legal move generation, rule helpers (helpers.py)
+  agents/      Agent protocol, RandomAgent, GreedyAgent, MCTSAgent
   play/        HumanAgent + terminal CLI
   eval/        Arena (head-to-head matches)
+  mcts/        MCTS helper functions
   training/    (future) Self-play, replay buffer, network training
+engine_rs/     (future) Rust port of python engine
 ```
 
 ## Installation
@@ -85,7 +73,7 @@ print(f"Greedy winrate: {result['agent_a_winrate']:.1%}")
 
 ```bash
 # Run all tests
-uv run python -m pytest -q
+uv run python -m pytest
 
 # Lint
 uv run ruff check .
@@ -107,9 +95,9 @@ Splendor Duel is a two-player race to 20 prestige points (or 10 crowns, or 10 po
    - **Buy a card** — Pay its cost from your tokens + bonuses (gold is wild).
    - **Reserve a card** — Take a face-down card from a deck (or face-up from pyramid) into your reserve; gain a gold.
 4. **Follow-up decisions** (as triggered):
-   - Payment choice (which tokens to spend)
    - Multicolor bonus color
    - Steal token from opponent
+   - Take matching token from board
    - Choose royal card ability
    - Discard down to 10 tokens
 
@@ -118,19 +106,3 @@ Splendor Duel is a two-player race to 20 prestige points (or 10 crowns, or 10 po
 - 20+ prestige points
 - 10+ crowns
 - 10+ points in a single color (bonus color for multicolor cards)
-
-## Project Conventions
-
-- **No runtime dependencies** — engine and agents use only the standard library.
-- **Determinism** — all state transitions are deterministic given a seed; agents must not use global randomness.
-- **Hidden-information discipline** — agents receive only `Observation`, never the full `GameState`.
-- **Observation perspective** — an `Observation` handed to an agent is always taken from the active player's perspective: `you` is the player to move and `current_player` is that player's seat index. `observation(state, player)` accepts any seat so tests can inspect a position from either side.
-- **Card-points-only colour scoring** — `PlayerState.color_prestige` is gone; a colour's score comes from `helpers.color_points`. A multicolor card counts toward its chosen colour, any other card toward its bonus colour, colourless cards and royals count toward nothing, and bonus tokens are not points in a colour.
-- **Type hints** on all public functions; `ruff` clean required.
-- **Tests** — every rule has a test; agent comparisons always play both seats with fixed seeds.
-
-## Next Steps (Roadmap)
-
-1. Determinized MCTS agent
-2. AlphaZero-style self-play (PyTorch)
-3. Rust hot-path acceleration (PyO3 + maturin)

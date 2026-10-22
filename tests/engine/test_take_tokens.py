@@ -25,7 +25,7 @@ def take_first_legal(st):
 def test_legal_lines_are_contiguous_straight_length_1_to_3():
     # hand-build a GameState with known board:
     # row 0: [RED, RED, RED, GOLD, None...]
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.RED
     board[2] = Color.RED
@@ -47,7 +47,7 @@ def test_legal_lines_are_contiguous_straight_length_1_to_3():
 
 
 def test_diagonal_lines_legal():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED  # (0,0)
     board[6] = Color.RED  # (1,1) - down-right diagonal
     board[12] = Color.RED  # (2,2)
@@ -58,7 +58,7 @@ def test_diagonal_lines_legal():
 
 
 def test_take_removes_tokens_and_applies_penalty():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.RED
     board[2] = Color.RED
@@ -75,7 +75,7 @@ def test_take_removes_tokens_and_applies_penalty():
 
 
 def test_two_pearl_take_penalizes():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.PEARL
     board[1] = Color.PEARL
     st = board_state(board=tuple(board), current_player=0)
@@ -88,7 +88,7 @@ def test_two_pearl_take_penalizes():
 
 
 def test_two_same_color_no_penalty():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.RED
     st = board_state(board=tuple(board), current_player=0)
@@ -101,7 +101,7 @@ def test_two_same_color_no_penalty():
 
 
 def test_apply_rejects_illegal_action():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[2] = Color.RED
     st = board_state(board=tuple(board))
@@ -110,7 +110,7 @@ def test_apply_rejects_illegal_action():
 
 
 def test_apply_does_not_mutate_input():
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     st = board_state(board=tuple(board))
     before = st
@@ -141,7 +141,7 @@ def test_take_token_mask_has_no_reverse_duplicates(seed):
 
 def test_take_token_mask_dedupes_horizontal_and_vertical_lines():
     """A hand-built board with both a horizontal and a vertical line is deduped."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED  # (0,0)
     board[1] = Color.RED  # (0,1) -> horizontal (0, 1)
     board[5] = Color.RED  # (1,0) -> vertical (0, 5)

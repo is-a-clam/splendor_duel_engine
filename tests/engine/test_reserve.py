@@ -22,7 +22,7 @@ def board_state(**kwargs) -> GameState:
 
 def test_reserve_requires_gold_on_board():
     """No gold on board -> ReserveCard not in legal actions."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.BLUE
     st = board_state(
@@ -38,7 +38,7 @@ def test_reserve_requires_gold_on_board():
 
 def test_reserve_enters_choose_gold_phase():
     """ReserveCard -> CHOOSE_GOLD phase."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD  # Gold available
     board[1] = Color.RED
     st = board_state(
@@ -70,7 +70,7 @@ def test_reserve_enters_choose_gold_phase():
 
 def test_reserve_from_pyramid_refills_slot_after_choose_gold():
     """After ChooseGold, pyramid slot refills (if deck not empty)."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     board[1] = Color.RED
     st = board_state(
@@ -111,7 +111,7 @@ def test_reserve_from_pyramid_refills_slot_after_choose_gold():
 
 def test_reserve_from_deck_top_does_not_refill():
     """Reserve from deck top (source="deck_3"/"deck_2"/"deck_1") does not refill pyramid."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     st = board_state(
         current_player=0,
@@ -150,7 +150,7 @@ def test_reserve_from_deck_top_does_not_refill():
 
 def test_reserve_illegal_at_three_reserved():
     """Cannot reserve when already have 3 reserved cards."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     base_st = board_state(
         current_player=0,
@@ -183,7 +183,7 @@ def test_reserve_illegal_at_three_reserved():
 
 def test_reserved_cards_are_in_own_player_state_and_turn_passes():
     """After reserve, card goes to player's reserved, turn passes to opponent."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     st = board_state(
         current_player=0,
@@ -220,7 +220,7 @@ def test_multicolor_may_be_reserved_without_owning_bonus():
     assert card is not None and card.is_multicolor, "L1-24 should be multicolor"
 
     # Set up board with gold available
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     st = board_state(
         current_player=0,
@@ -228,6 +228,7 @@ def test_multicolor_may_be_reserved_without_owning_bonus():
         board=tuple(board),
     )
     # board_state re-seeds, so locate the same card by id in the fresh state.
+    assert st.pyramid[2][2] is not None
     assert st.pyramid[2][2].id == card.id
     dp = decide(st)
     reserve_actions = [a for a in dp.legal_actions if isinstance(a, ReserveCard)]
@@ -237,7 +238,8 @@ def test_multicolor_may_be_reserved_without_owning_bonus():
         a
         for a in reserve_actions
         if a.source == "pyramid"
-        and st.pyramid[a.index // 10][a.index % 10].id == card.id
+        and (slot := st.pyramid[a.index // 10][a.index % 10]) is not None
+        and slot.id == card.id
     ]
     assert len(multi_actions) == 1
     # The action application should not fail due to multicolor restriction at reserve time

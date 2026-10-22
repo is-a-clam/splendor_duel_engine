@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from splendor_duel_engine.agents.mcts_determinize import determinize
+from splendor_duel_engine.mcts.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import (
     ChooseGold,
     DoneWithPrivileges,
@@ -323,7 +323,6 @@ def test_determinize_invariant_check():
     This test runs determinization on multiple random game states and verifies that
     the invariant holds at the point of partitioning pools.
     """
-    import random as pyrandom
 
     # Test on initial state
     state = new_game(0)
@@ -357,7 +356,7 @@ def test_determinize_invariant_check():
     for game_seed in range(10):
         state = new_game(game_seed)
         # Advance a few random turns
-        for _ in range(pyrandom.randint(0, 5)):
+        for _ in range(random.randint(0, 5)):
             if state.phase == Phase.MANDATORY:
                 from splendor_duel_engine.engine.actions import TakeTokens, decide
 
@@ -401,7 +400,7 @@ def _verify_card_invariant(obs: Observation, det_state) -> None:
     1. known + deck + opp_hidden == total (all cards accounted for)
     2. pre_sampling_pool_size == deck + opp_hidden (pool contains exactly deck + hidden cards)
     """
-    from splendor_duel_engine.agents.mcts_determinize import (
+    from splendor_duel_engine.mcts.mcts_determinize import (
         TOTAL_PER_LEVEL,
         _build_remaining_pools,
         _compute_known_per_level,

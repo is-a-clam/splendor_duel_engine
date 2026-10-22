@@ -8,7 +8,7 @@ from splendor_duel_engine.engine.actions import apply, decide
 from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import new_game
-from tests.fuzz_helpers import assert_invariants, play_random_game, replay
+from tests.engine.fuzz_helpers import assert_invariants, play_random_game, replay
 
 SEEDS = range(50)
 

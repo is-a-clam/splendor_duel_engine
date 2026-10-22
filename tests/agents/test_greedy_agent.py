@@ -288,7 +288,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
     base = board_state(current_player=0, phase=Phase.MANDATORY)
 
     # (a) No gold on board -> the engine offers no ReserveCard; take tokens
-    board_a = [None] * 25
+    board_a: list[Color | None] = [None] * 25
     board_a[0] = Color.RED
     st_a = replace(base, board=tuple(board_a))
     dp_a = decide(st_a)
@@ -298,7 +298,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
 
     # (b) Gold on board but 3 cards reserved -> still no ReserveCard offered
     three_reserved = tuple(ReservedCard(card=c, from_deck=False) for c in jewels[:3])
-    board_b = [None] * 25
+    board_b: list[Color | None] = [None] * 25
     board_b[0] = Color.RED
     board_b[5] = Color.GOLD
     st_b = replace(
@@ -312,7 +312,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
     assert isinstance(action, TakeTokens)
 
     # (c) Gold on board, free slot, visible 6-point card -> reserve that card
-    board_c = [None] * 25
+    board_c: list[Color | None] = [None] * 25
     board_c[3] = Color.GOLD
     st_c = replace(
         base,
@@ -334,7 +334,7 @@ def test_greedy_avoids_penalty_unless_high_value_purchase_enabled():
     base = board_state(current_player=0, phase=Phase.MANDATORY, pyramid=EMPTY_PYRAMID)
 
     def make_state(hand: Tokens) -> GameState:
-        board = [None] * 25
+        board: list[Color | None] = [None] * 25
         board[0] = Color.WHITE
         board[1] = Color.WHITE
         board[2] = Color.WHITE  # penalty line of 3
@@ -409,7 +409,7 @@ def test_greedy_use_privileges_takes_needed_color_for_best_affordable_card():
     base = board_state(
         current_player=0, phase=Phase.USE_PRIVILEGES, pyramid=EMPTY_PYRAMID
     )
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.WHITE
     board[5] = Color.BLUE
     board[7] = Color.RED
@@ -436,7 +436,7 @@ def test_greedy_use_privileges_takes_contested_color_when_nothing_affordable():
     base = board_state(
         current_player=0, phase=Phase.USE_PRIVILEGES, pyramid=EMPTY_PYRAMID
     )
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.WHITE
     board[1] = Color.WHITE
     board[2] = Color.WHITE  # white x3

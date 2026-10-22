@@ -136,7 +136,7 @@ def test_spiral_deal_and_deck_top_match_pinned_rng_order():
     assert st.current_player == first
     # The deck top is the last element, and it becomes the row's first card.
     for row, top in zip(st.pyramid, tops, strict=True):
-        assert row[0].id == top.id
+        assert row[0] is not None and row[0].id == top.id
         assert row[0] is not top  # different instances from replay using fresh load
 
 
@@ -156,8 +156,7 @@ def test_pyramid_rows_have_level_matching_cards():
     for level, deck, row_length in zip((3, 2, 1), st.decks, (3, 4, 5), strict=True):
         row = st.pyramid[3 - level]
         assert len(row) == row_length
-        assert all(c is not None for c in row)
-        assert all(c.level == level for c in row)
+        assert all(c is not None and c.level == level for c in row)
         assert all(c.level == level for c in deck)
 
 

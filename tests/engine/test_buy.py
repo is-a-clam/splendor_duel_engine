@@ -446,7 +446,7 @@ def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
     st = new_game(42)
 
     # Ensure exactly one gold on board for reserve
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     st = replace(st, board=tuple(board), current_player=0, phase=Phase.MANDATORY)
 

@@ -26,6 +26,7 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.colors import Tokens
 from splendor_duel_engine.engine.observation import Observation
+from splendor_duel_engine.eval.arena import AGENT_REGISTRY
 
 
 def _fmt_tokens(tokens: Tokens) -> str:
@@ -239,8 +240,6 @@ class HumanAgent:
 
 
 def main() -> None:
-    from splendor_duel_engine.eval.arena import AGENT_REGISTRY
-
     parser = argparse.ArgumentParser(description="Play Splendor Duel against an agent")
     parser.add_argument(
         "--opponent", choices=list(AGENT_REGISTRY.keys()), default="greedy"

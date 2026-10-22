@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from dataclasses import replace
 
-from splendor_duel_engine.agents.mcts_core import (
+from splendor_duel_engine.mcts.mcts_core import (
     MCTSNode,
     _heuristic_evaluation,
     backpropagate,
@@ -14,8 +14,9 @@ from splendor_duel_engine.agents.mcts_core import (
     playout,
     uct_select,
 )
-from splendor_duel_engine.agents.mcts_determinize import determinize
+from splendor_duel_engine.mcts.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import (
+    BuyCard,
     DoneWithPrivileges,
     DoneWithReplenish,
     apply,
@@ -354,7 +355,7 @@ def test_playout_from_near_terminal_state():
     # Verify the state is set up correctly
     dp = decide(near_end_state)
     buy_actions = [
-        a for a in dp.legal_actions if hasattr(a, "card") and a.card.id == cheap_card.id
+        a for a in dp.legal_actions if isinstance(a, BuyCard) and a.card.id == cheap_card.id
     ]
     assert buy_actions, f"Cheap card {cheap_card.id} should be buyable"
 

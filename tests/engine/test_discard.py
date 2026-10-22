@@ -225,8 +225,7 @@ def test_mid_turn_gain_over_ten_is_fine_until_end_of_turn():
 
     # Resolving the discard downs to exactly 10 and passes the turn.
     dp = decide(st)
-    assert all(isinstance(a, DiscardTokens) for a in dp.legal_actions)
-    assert all(a.tokens.total() == 2 for a in dp.legal_actions)
+    assert all(isinstance(a, DiscardTokens) and a.tokens.total() == 2 for a in dp.legal_actions)
     st = apply(st, dp.legal_actions[0])
     assert st.players[0].tokens.total() == 10
     assert st.current_player == 1

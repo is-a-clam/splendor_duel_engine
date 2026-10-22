@@ -23,7 +23,7 @@ def board_state(**kwargs) -> GameState:
 def test_choose_gold_enumerates_all_gold_indices():
     """CHOOSE_GOLD phase enumerates ChooseGold(index) for each gold token on board."""
     # Set up board with multiple gold tokens
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     board[5] = Color.GOLD
     board[10] = Color.GOLD
@@ -49,7 +49,7 @@ def test_choose_gold_enumerates_all_gold_indices():
 
 def test_choose_gold_takes_specific_gold_token():
     """ChooseGold(index) takes the specific gold token at that index."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     board[5] = Color.GOLD
     board[10] = Color.GOLD
@@ -78,7 +78,7 @@ def test_choose_gold_takes_specific_gold_token():
 
 def test_choose_gold_completes_reserve_and_passes_turn():
     """After ChooseGold, reserve completes and turn passes to opponent."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     st = board_state(
         current_player=0,
@@ -119,7 +119,7 @@ def test_choose_gold_completes_reserve_and_passes_turn():
 
 def test_choose_gold_invalid_index_raises():
     """Choosing an index without gold raises ValueError."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     board[5] = Color.RED  # Not gold
     st = board_state(
@@ -198,7 +198,7 @@ def test_choose_gold_deck_reserve_does_not_refill():
 
 def test_choose_gold_with_multiple_gold_allows_choice():
     """Player can choose which gold token to take when multiple are available."""
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.GOLD
     board[1] = Color.GOLD
     board[2] = Color.GOLD

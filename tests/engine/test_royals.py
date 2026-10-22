@@ -5,6 +5,7 @@ from dataclasses import replace
 from splendor_duel_engine.engine.actions import (
     BuyCard,
     ChooseMulticolor,
+    ChooseRoyal,
     PayTokens,
     apply,
     decide,
@@ -156,9 +157,10 @@ def test_max_two_royals_per_player():
     assert st.players[0].crowns == 3
     available_before = len(st.royals_available)
     prestige_before = st.players[0].prestige
-
+    action_chosen = decide(st).legal_actions[0]
+    assert isinstance(action_chosen, ChooseRoyal)
     royal_chosen = next(
-        r for r in st.royals_available if r.id == decide(st).legal_actions[0].royal_id
+        r for r in st.royals_available if r.id == action_chosen.royal_id
     )
     st = choose_first_royal(st)
     assert len(st.royals_available) == available_before - 1
@@ -183,9 +185,10 @@ def test_max_two_royals_per_player():
     assert st.players[0].crowns == 6
     available_before = len(st.royals_available)
     prestige_before = st.players[0].prestige
-
+    action_chosen = decide(st).legal_actions[0]
+    assert isinstance(action_chosen, ChooseRoyal)
     royal_chosen = next(
-        r for r in st.royals_available if r.id == decide(st).legal_actions[0].royal_id
+        r for r in st.royals_available if r.id == action_chosen.royal_id
     )
     st = choose_first_royal(st)
     assert len(st.royals_available) == available_before - 1
@@ -260,6 +263,7 @@ def test_no_royal_available_skips_choice():
         if c.id == "L2-19":
             card = c
             break
+    assert card is not None
     p0 = replace(
         base_st.players[0],
         bonus=Tokens(white=2, blue=2, red=2, black=2, pearl=1),
@@ -346,7 +350,9 @@ def test_multicolor_purchase_crossing_crown_threshold_grants_royal():
     assert len(decide(st4).legal_actions) == len(st4.royals_available)
 
     royal_actions = decide(st4).legal_actions
-    royal = next(r for r in st4.royals_available if r.id == royal_actions[0].royal_id)
+    chosen_action = royal_actions[0]
+    assert isinstance(chosen_action, ChooseRoyal)
+    royal = next(r for r in st4.royals_available if r.id == chosen_action.royal_id)
     prestige_before = st4.players[0].prestige
     st5 = apply(st4, royal_actions[0])
     assert st5.players[0].prestige == prestige_before + royal.points

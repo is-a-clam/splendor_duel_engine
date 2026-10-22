@@ -1,12 +1,14 @@
 """Tests for the Agent protocol and play_game helper (Task 1)."""
 
 from splendor_duel_engine.agents.base import Agent, play_game
+from splendor_duel_engine.engine.observation import Observation
+from splendor_duel_engine.engine.actions import Action
 
 
 def test_agent_protocol_exists():
     # Just verify the protocol can be imported and used for type checking
     class DummyAgent:
-        def choose_action(self, obs, legal_actions):
+        def choose_action(self, observation: Observation, legal_actions: tuple[Action, ...]) -> Action:
             return legal_actions[0]
 
     assert isinstance(DummyAgent(), Agent)
@@ -14,7 +16,7 @@ def test_agent_protocol_exists():
 
 def test_play_game_runs_to_completion():
     class FirstLegalAgent:
-        def choose_action(self, obs, legal_actions):
+        def choose_action(self, observation: Observation, legal_actions: tuple[Action, ...]) -> Action:
             return legal_actions[0]
 
     final = play_game(FirstLegalAgent(), FirstLegalAgent(), seed=0)

@@ -111,7 +111,7 @@ def test_done_with_privileges_advances_to_replenish():
 def test_replenish_fills_from_bag_along_spiral_and_grants_opponent_privilege():
     # Board with 3 empty slots, bag with 3 tokens
     # We need to create a specific board state
-    empty_board = [None] * 25
+    empty_board: list[Color | None] = [None] * 25
     # Fill some slots
     for i, idx in enumerate(SPIRAL[:22]):  # First 22 filled
         empty_board[idx] = list(GEM_COLORS)[i % 5]
@@ -169,7 +169,7 @@ def test_forced_replenish_when_no_mandatory_action():
 
 def test_forced_replenish_not_triggered_when_take_available():
     # If there's a legal take action, we should be in MANDATORY not REPLENISH
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     bag = Tokens(white=1)
     st = board_state(
@@ -196,7 +196,7 @@ def test_done_with_replenish_advances_to_mandatory():
 
 def test_privilege_penalty_from_take_tokens_grants_opponent_privilege():
     # Test that taking 3 same-color or 2 pearls grants opponent privilege
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.RED
     board[2] = Color.RED
@@ -218,7 +218,7 @@ def test_privilege_penalty_from_take_tokens_grants_opponent_privilege():
 
 def test_privilege_penalty_steals_from_taker_when_supply_empty():
     # When supply is empty, penalty steals from the taker
-    board = [None] * 25
+    board: list[Color | None] = [None] * 25
     board[0] = Color.RED
     board[1] = Color.RED
     board[2] = Color.RED

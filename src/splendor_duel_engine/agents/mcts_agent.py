@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from splendor_duel_engine.agents.mcts_core import mcts_search
-from splendor_duel_engine.agents.mcts_determinize import determinize
+from splendor_duel_engine.mcts.mcts_core import mcts_search
+from splendor_duel_engine.mcts.mcts_determinize import determinize
 from splendor_duel_engine.engine.actions import Action
 from splendor_duel_engine.engine.observation import Observation
 
