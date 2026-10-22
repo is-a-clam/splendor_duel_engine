@@ -1,5 +1,6 @@
 //! PyO3 wrapper types.
 
+use crate::actions::{decide as actions_decide, Action};
 use crate::cards::{Ability, Card, RoyalCard};
 use crate::colors::{Color, Tokens};
 use crate::helpers as rule_helpers;
@@ -637,6 +638,7 @@ impl PyRoyalCard {
 #[pyclass(
     frozen,
     eq,
+    hash,
     name = "BuyCard",
     module = "splendor_duel_engine._core",
     get_all,
@@ -682,6 +684,7 @@ impl PyBuyCard {
 #[pyclass(
     frozen,
     eq,
+    hash,
     name = "ReserveCard",
     module = "splendor_duel_engine._core",
     get_all,
@@ -1350,4 +1353,415 @@ pub fn observation(state: &PyGameState, player: usize) -> PyResult<PyObservation
         ));
     }
     Ok(state_observation(&state.inner, player).into())
+}
+
+// ===== Action wrappers =====
+//
+// One `#[pyclass]` per action dataclass in `engine/actions.py`. `PyBuyCard`
+// and `PyReserveCard` above double as the `BuyCard` and `ReserveCard` actions.
+// Class names and field names must match Python exactly: `tests/rust/parity.py`
+// fingerprints actions by `type(action).__name__` and attribute names.
+
+/// UsePrivilege action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "UsePrivilege",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyUsePrivilege {
+    pub index: usize,
+}
+
+#[pymethods]
+impl PyUsePrivilege {
+    #[new]
+    #[pyo3(signature = (index))]
+    fn new(index: usize) -> Self {
+        PyUsePrivilege { index }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("UsePrivilege(index={})", self.index)
+    }
+}
+
+/// DoneWithPrivileges action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "DoneWithPrivileges",
+    module = "splendor_duel_engine._core"
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyDoneWithPrivileges {}
+
+#[pymethods]
+impl PyDoneWithPrivileges {
+    #[new]
+    fn new() -> Self {
+        PyDoneWithPrivileges {}
+    }
+
+    fn __repr__(&self) -> String {
+        "DoneWithPrivileges()".to_string()
+    }
+}
+
+/// Replenish action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "Replenish",
+    module = "splendor_duel_engine._core"
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyReplenish {}
+
+#[pymethods]
+impl PyReplenish {
+    #[new]
+    fn new() -> Self {
+        PyReplenish {}
+    }
+
+    fn __repr__(&self) -> String {
+        "Replenish()".to_string()
+    }
+}
+
+/// DoneWithReplenish action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "DoneWithReplenish",
+    module = "splendor_duel_engine._core"
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyDoneWithReplenish {}
+
+#[pymethods]
+impl PyDoneWithReplenish {
+    #[new]
+    fn new() -> Self {
+        PyDoneWithReplenish {}
+    }
+
+    fn __repr__(&self) -> String {
+        "DoneWithReplenish()".to_string()
+    }
+}
+
+/// TakeTokens action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "TakeTokens",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyTakeTokens {
+    pub line: Vec<usize>,
+}
+
+#[pymethods]
+impl PyTakeTokens {
+    #[new]
+    #[pyo3(signature = (line))]
+    fn new(line: Vec<usize>) -> Self {
+        PyTakeTokens { line }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TakeTokens(line={:?})", self.line)
+    }
+}
+
+/// PayTokens action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "PayTokens",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyPayTokens {
+    pub payment: PyTokens,
+}
+
+#[pymethods]
+impl PyPayTokens {
+    #[new]
+    #[pyo3(signature = (payment))]
+    fn new(payment: &PyTokens) -> Self {
+        PyPayTokens { payment: *payment }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("PayTokens(payment={:?})", self.payment)
+    }
+}
+
+/// ChooseGold action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "ChooseGold",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyChooseGold {
+    pub index: usize,
+}
+
+#[pymethods]
+impl PyChooseGold {
+    #[new]
+    #[pyo3(signature = (index))]
+    fn new(index: usize) -> Self {
+        PyChooseGold { index }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ChooseGold(index={})", self.index)
+    }
+}
+
+/// ChooseMulticolor action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "ChooseMulticolor",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyChooseMulticolor {
+    pub color: PyColor,
+}
+
+#[pymethods]
+impl PyChooseMulticolor {
+    #[new]
+    #[pyo3(signature = (color))]
+    fn new(color: &PyColor) -> Self {
+        PyChooseMulticolor { color: *color }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ChooseMulticolor(color={})", self.color.__repr__())
+    }
+}
+
+/// ChooseStealToken action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "ChooseStealToken",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyChooseStealToken {
+    pub color: PyColor,
+}
+
+#[pymethods]
+impl PyChooseStealToken {
+    #[new]
+    #[pyo3(signature = (color))]
+    fn new(color: &PyColor) -> Self {
+        PyChooseStealToken { color: *color }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ChooseStealToken(color={})", self.color.__repr__())
+    }
+}
+
+/// ChooseMatchingToken action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "ChooseMatchingToken",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyChooseMatchingToken {
+    pub index: usize,
+}
+
+#[pymethods]
+impl PyChooseMatchingToken {
+    #[new]
+    #[pyo3(signature = (index))]
+    fn new(index: usize) -> Self {
+        PyChooseMatchingToken { index }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ChooseMatchingToken(index={})", self.index)
+    }
+}
+
+/// ChooseRoyal action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "ChooseRoyal",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyChooseRoyal {
+    pub royal_id: String,
+}
+
+#[pymethods]
+impl PyChooseRoyal {
+    #[new]
+    #[pyo3(signature = (royal_id))]
+    fn new(royal_id: String) -> Self {
+        PyChooseRoyal { royal_id }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ChooseRoyal(royal_id={:?})", self.royal_id)
+    }
+}
+
+/// DiscardTokens action wrapper.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    name = "DiscardTokens",
+    module = "splendor_duel_engine._core",
+    get_all
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PyDiscardTokens {
+    pub tokens: PyTokens,
+}
+
+#[pymethods]
+impl PyDiscardTokens {
+    #[new]
+    #[pyo3(signature = (tokens))]
+    fn new(tokens: &PyTokens) -> Self {
+        PyDiscardTokens { tokens: *tokens }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DiscardTokens(tokens={:?})", self.tokens)
+    }
+}
+
+/// DecisionPoint wrapper: the phase and the ordered legal actions.
+#[pyclass(frozen, name = "DecisionPoint", module = "splendor_duel_engine._core")]
+pub struct PyDecisionPoint {
+    pub phase: PyPhase,
+    pub legal_actions: Vec<Py<PyAny>>,
+}
+
+#[pymethods]
+impl PyDecisionPoint {
+    #[getter]
+    fn phase(&self) -> PyPhase {
+        self.phase
+    }
+
+    #[getter]
+    fn legal_actions(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
+        self.legal_actions
+            .iter()
+            .map(|action| action.clone_ref(py))
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "DecisionPoint(phase={}, legal_actions=<{} actions>)",
+            self.phase.__repr__(),
+            self.legal_actions.len()
+        )
+    }
+}
+
+/// Convert one Rust action into its Python wrapper instance.
+fn action_to_py(py: Python<'_>, action: Action) -> PyResult<Py<PyAny>> {
+    Ok(match action {
+        Action::UsePrivilege { index } => Py::new(py, PyUsePrivilege { index })?.into_any(),
+        Action::DoneWithPrivileges => Py::new(py, PyDoneWithPrivileges {})?.into_any(),
+        Action::Replenish => Py::new(py, PyReplenish {})?.into_any(),
+        Action::DoneWithReplenish => Py::new(py, PyDoneWithReplenish {})?.into_any(),
+        Action::TakeTokens { line } => Py::new(py, PyTakeTokens { line })?.into_any(),
+        Action::BuyCard(card) => Py::new(py, PyBuyCard::from(card))?.into_any(),
+        Action::PayTokens { payment } => Py::new(
+            py,
+            PyPayTokens {
+                payment: payment.into(),
+            },
+        )?
+        .into_any(),
+        Action::ReserveCard(reserve) => Py::new(py, PyReserveCard::from(reserve))?.into_any(),
+        Action::ChooseGold { index } => Py::new(py, PyChooseGold { index })?.into_any(),
+        Action::ChooseMulticolor { color } => Py::new(
+            py,
+            PyChooseMulticolor {
+                color: PyColor::from_inner(color),
+            },
+        )?
+        .into_any(),
+        Action::ChooseStealToken { color } => Py::new(
+            py,
+            PyChooseStealToken {
+                color: PyColor::from_inner(color),
+            },
+        )?
+        .into_any(),
+        Action::ChooseMatchingToken { index } => {
+            Py::new(py, PyChooseMatchingToken { index })?.into_any()
+        }
+        Action::ChooseRoyal { royal_id } => Py::new(py, PyChooseRoyal { royal_id })?.into_any(),
+        Action::DiscardTokens { tokens } => Py::new(
+            py,
+            PyDiscardTokens {
+                tokens: tokens.into(),
+            },
+        )?
+        .into_any(),
+    })
+}
+
+/// Return the legal actions for the state's current phase.
+#[pyfunction]
+pub fn decide(py: Python<'_>, state: &PyGameState) -> PyResult<PyDecisionPoint> {
+    let decision = actions_decide(&state.inner).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let legal_actions = decision
+        .legal_actions
+        .into_iter()
+        .map(|action| action_to_py(py, action))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyDecisionPoint {
+        phase: PyPhase::from_inner(decision.phase),
+        legal_actions,
+    })
 }
