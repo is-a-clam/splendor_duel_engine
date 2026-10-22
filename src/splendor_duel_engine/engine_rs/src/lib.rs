@@ -24,5 +24,6 @@ fn __version__() -> &'static str {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(__version__, m)?)?;
+    m.add_class::<py::PyRandom>()?;
     Ok(())
 }
