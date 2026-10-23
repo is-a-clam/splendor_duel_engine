@@ -28,9 +28,9 @@ def test_human_agent_reprompts_on_invalid_input():
     )
     from splendor_duel_engine.engine.actions import decide
     from splendor_duel_engine.engine.observation import observation
-    from splendor_duel_engine.engine.state import new_game
+    from splendor_duel_engine.engine.state import GameState
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = human.choose_action(obs, dp.legal_actions)
@@ -46,9 +46,9 @@ def test_human_agent_renders_observation_not_hidden_info():
     )
     from splendor_duel_engine.engine.actions import decide
     from splendor_duel_engine.engine.observation import observation
-    from splendor_duel_engine.engine.state import new_game
+    from splendor_duel_engine.engine.state import GameState
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     human.choose_action(obs, dp.legal_actions)
@@ -94,9 +94,9 @@ def test_human_agent_input_terminated():
     )
     from splendor_duel_engine.engine.actions import decide
     from splendor_duel_engine.engine.observation import observation
-    from splendor_duel_engine.engine.state import new_game
+    from splendor_duel_engine.engine.state import GameState
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     with pytest.raises(SystemExit):
@@ -116,9 +116,9 @@ def test_human_agent_eof_terminated():
     )
     from splendor_duel_engine.engine.actions import decide
     from splendor_duel_engine.engine.observation import observation
-    from splendor_duel_engine.engine.state import new_game
+    from splendor_duel_engine.engine.state import GameState
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     with pytest.raises(SystemExit):

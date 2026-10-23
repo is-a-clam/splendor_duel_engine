@@ -229,15 +229,52 @@ impl PyTokens {
         }
     }
 
-    fn count(&self, color: &PyColor) -> u8 {
-        match color.inner() {
-            Color::WHITE => self.white,
-            Color::BLUE => self.blue,
-            Color::GREEN => self.green,
-            Color::RED => self.red,
-            Color::BLACK => self.black,
-            Color::PEARL => self.pearl,
-            Color::GOLD => self.gold,
+    fn __repr__(&self) -> String {
+        format!(
+            "Tokens(white={}, blue={}, green={}, red={}, black={}, pearl={}, gold={})",
+            self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold
+        )
+    }
+
+    fn __str__(&self) -> String {
+        self.__repr__()
+    }
+
+    fn __hash__(&self) -> isize {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (
+            self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold,
+        )
+            .hash(&mut hasher);
+        hasher.finish() as isize
+    }
+
+    fn count(&self, color: &Bound<'_, PyAny>) -> PyResult<u8> {
+        // Try to extract as Rust PyColor first
+        if let Ok(color) = color.extract::<PyColor>() {
+            match color.inner() {
+                Color::WHITE => Ok(self.white),
+                Color::BLUE => Ok(self.blue),
+                Color::GREEN => Ok(self.green),
+                Color::RED => Ok(self.red),
+                Color::BLACK => Ok(self.black),
+                Color::PEARL => Ok(self.pearl),
+                Color::GOLD => Ok(self.gold),
+            }
+        } else {
+            // Try to extract as Python Color enum (has .value attribute)
+            let value: String = color.getattr("value")?.extract()?;
+            match value.as_str() {
+                "white" => Ok(self.white),
+                "blue" => Ok(self.blue),
+                "green" => Ok(self.green),
+                "red" => Ok(self.red),
+                "black" => Ok(self.black),
+                "pearl" => Ok(self.pearl),
+                "gold" => Ok(self.gold),
+                _ => Err(pyo3::exceptions::PyValueError::new_err(format!("invalid color: {}", value))),
+            }
         }
     }
 
@@ -268,33 +305,13 @@ impl PyTokens {
             gold: self.gold.wrapping_sub(other.gold),
         }
     }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "Tokens(white={}, blue={}, green={}, red={}, black={}, pearl={}, gold={})",
-            self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold
-        )
-    }
-
-    fn __str__(&self) -> String {
-        self.__repr__()
-    }
-
-    fn __hash__(&self) -> isize {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (
-            self.white, self.blue, self.green, self.red, self.black, self.pearl, self.gold,
-        )
-            .hash(&mut hasher);
-        hasher.finish() as isize
-    }
 }
 
 /// Ability enum - fieldless enum for PyO3 to expose variants as class attributes.
 #[allow(non_camel_case_types)]
 #[pyclass(
     eq,
+    hash,
     frozen,
     name = "Ability",
     module = "splendor_duel_engine._core",
@@ -1139,6 +1156,88 @@ impl PyGameState {
         })
     }
 
+    /// Build a `GameState` from arbitrary fields with a seeded RNG (for determinizer).
+    #[classmethod]
+    #[pyo3(name = "from_seed", signature = (players, board, bag, decks, pyramid, royals_available, privileges_supply, current_player, winner, phase, pending_buy, pending_reserve, seed, extra_turn=false, pending_ability=None, pending_royal=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn from_seed(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        players: Vec<PyPlayerState>,
+        board: Vec<Option<PyColor>>,
+        bag: &PyTokens,
+        decks: Vec<Vec<PyCard>>,
+        pyramid: Vec<Vec<Option<PyCard>>>,
+        royals_available: Vec<PyRoyalCard>,
+        privileges_supply: u32,
+        current_player: usize,
+        winner: Option<usize>,
+        phase: PyPhase,
+        pending_buy: Option<&PyBuyCard>,
+        pending_reserve: Option<&PyReserveCard>,
+        seed: i64,
+        extra_turn: bool,
+        pending_ability: Option<&PyAbility>,
+        pending_royal: bool,
+    ) -> PyResult<Self> {
+        let players: [PlayerState; 2] = players
+            .iter()
+            .map(PlayerState::from)
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("players must have length 2"))?;
+
+        let board: [Option<Color>; 25] = board
+            .into_iter()
+            .map(|c| c.map(|c| c.inner()))
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("board must have length 25"))?;
+
+        let decks: [Vec<Card>; 3] = decks
+            .into_iter()
+            .map(|deck| deck.iter().map(Card::from).collect())
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("decks must have length 3"))?;
+
+        let pyramid: [Vec<Option<Card>>; 3] = pyramid
+            .into_iter()
+            .map(|row| row.iter().map(|c| c.as_ref().map(Card::from)).collect())
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| pyo3::exceptions::PyValueError::new_err("pyramid must have length 3"))?;
+
+        Ok(PyGameState {
+            inner: GameState {
+                players,
+                board,
+                bag: bag.into(),
+                decks,
+                pyramid,
+                royals_available: royals_available.iter().map(RoyalCard::from).collect(),
+                privileges_supply,
+                current_player,
+                winner,
+                phase: phase.inner(),
+                pending_buy: pending_buy.map(BuyCard::from),
+                pending_reserve: pending_reserve.map(ReserveCard::from),
+                extra_turn,
+                pending_ability: pending_ability.map(Ability::from),
+                pending_royal,
+                rng: Rc::new(rng::Random::from_seed(seed)),
+            },
+        })
+    }
+
+    /// Create a fresh game set up deterministically from `seed`.
+    #[classmethod]
+    #[pyo3(name = "new_game")]
+    fn py_new_game(_cls: &pyo3::Bound<'_, pyo3::types::PyType>, seed: i64) -> PyResult<PyGameState> {
+        Ok(PyGameState {
+            inner: state_new_game(seed),
+        })
+    }
+
     #[getter]
     fn players(&self) -> [PyPlayerState; 2] {
         [
@@ -1242,109 +1341,109 @@ impl PyGameState {
         )
     }
 }
-
-/// Create a fresh game set up deterministically from `seed`.
-#[pyfunction]
-pub fn new_game(seed: i64) -> PyGameState {
-    PyGameState {
-        inner: state_new_game(seed),
-    }
-}
-
-/// Report missing tokens per colour after bonuses and payment.
-///
-/// Returns an insertion-ordered `dict[Color, int]`: gem colours in
-/// `GEM_COLORS` order, then pearl, and only colours with a positive shortfall.
-#[pyfunction]
-pub fn cost_deficits<'py>(
-    py: Python<'py>,
-    cost: &PyTokens,
-    bonus: &PyTokens,
-    paid: &PyTokens,
-) -> PyResult<Bound<'py, PyDict>> {
-    let dict = PyDict::new(py);
-    for (colour, missing) in
-        rule_helpers::cost_deficits((*cost).into(), (*bonus).into(), (*paid).into())
-    {
-        dict.set_item(PyColor::from_inner(colour), missing)?;
-    }
-    Ok(dict)
-}
-
-/// Return whether the player may buy this card right now.
-#[pyfunction]
-pub fn can_afford_card(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> bool {
-    rule_helpers::can_afford_card(&Card::from(card), (*tokens).into(), (*bonus).into())
-}
-
-/// Enumerate legal payments for buying `card`, in the pinned loop order.
-#[pyfunction]
-pub fn legal_payments(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> Vec<PyTokens> {
-    rule_helpers::legal_payments(&Card::from(card), (*tokens).into(), (*bonus).into())
-        .into_iter()
-        .map(PyTokens::from)
-        .collect()
-}
-
-/// Return true if taking these colours triggers a penalty.
-#[pyfunction]
-pub fn take_penalty(colors: Vec<PyColor>) -> bool {
-    let colors: Vec<Color> = colors.iter().map(PyColor::inner).collect();
-    rule_helpers::take_penalty(&colors)
-}
-
-/// Sum card points for purchased cards of effective colour `color`.
-#[pyfunction]
-pub fn color_points(purchased: Vec<PyPurchasedCard>, color: &PyColor) -> u32 {
-    let purchased: Vec<PurchasedCard> = purchased.iter().map(PurchasedCard::from).collect();
-    rule_helpers::color_points(&purchased, color.inner())
-}
-
-/// Enumerate distinct discard subsets of `tokens` summing to `excess`.
-#[pyfunction]
-pub fn discard_subsets(tokens: &PyTokens, excess: i64) -> Vec<PyTokens> {
-    rule_helpers::discard_subsets((*tokens).into(), excess)
-        .into_iter()
-        .map(PyTokens::from)
-        .collect()
-}
-
-/// Return true if the player may reserve a card.
-#[pyfunction]
-pub fn can_reserve(board: Vec<Option<PyColor>>, reserved_count: i64) -> bool {
-    let board: Vec<Option<Color>> = board
-        .into_iter()
-        .map(|colour| colour.map(|c| c.inner()))
-        .collect();
-    rule_helpers::can_reserve(&board, reserved_count)
-}
-
-/// Return all visible cards in contract order.
-#[pyfunction]
-pub fn visible_cards(
-    pyramid: Vec<Vec<Option<PyCard>>>,
-    reserved_public: Vec<PyCard>,
-    reserved_deck: Vec<PyCard>,
-) -> Vec<PyCard> {
-    let pyramid: Vec<Vec<Option<Card>>> = pyramid
-        .iter()
-        .map(|row| row.iter().map(|c| c.as_ref().map(Card::from)).collect())
-        .collect();
-    let reserved_public: Vec<Card> = reserved_public.iter().map(Card::from).collect();
-    let reserved_deck: Vec<Card> = reserved_deck.iter().map(Card::from).collect();
-    rule_helpers::visible_cards(&pyramid, &reserved_public, &reserved_deck)
-        .iter()
-        .map(PyCard::from)
-        .collect()
-}
-
-/// Return true if this player meets any win condition.
-#[pyfunction]
-pub fn is_winner(player: &PyPlayerState) -> bool {
-    rule_helpers::is_winner(&PlayerState::from(player))
-}
-
-/// Create an observation from a GameState for a specific player.
+ 
+ /// Report missing tokens per colour after bonuses and payment.
+ ///
+ /// Returns an insertion-ordered `dict[Color, int]`: gem colours in
+ /// `GEM_COLORS` order, then pearl, and only colours with a positive shortfall.
+ #[pyfunction]
+ pub fn cost_deficits<'py>(
+     py: Python<'py>,
+     cost: &PyTokens,
+     bonus: &PyTokens,
+     paid: &PyTokens,
+ ) -> PyResult<Bound<'py, PyDict>> {
+     let dict = PyDict::new(py);
+     for (colour, missing) in
+         rule_helpers::cost_deficits((*cost).into(), (*bonus).into(), (*paid).into())
+     {
+         dict.set_item(PyColor::from_inner(colour), missing)?;
+     }
+     Ok(dict)
+ }
+ 
+ /// Return whether the player may buy this card right now.
+ #[pyfunction]
+ pub fn can_afford_card(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> bool {
+     rule_helpers::can_afford_card(&Card::from(card), (*tokens).into(), (*bonus).into())
+ }
+ 
+ /// Enumerate legal payments for buying `card`, in the pinned loop order.
+ #[pyfunction]
+ pub fn legal_payments(card: &PyCard, tokens: &PyTokens, bonus: &PyTokens) -> Vec<PyTokens> {
+     rule_helpers::legal_payments(&Card::from(card), (*tokens).into(), (*bonus).into())
+         .into_iter()
+         .map(PyTokens::from)
+         .collect()
+ }
+ 
+ /// Return true if taking these colours triggers a penalty.
+ #[pyfunction]
+ pub fn take_penalty(colors: Vec<PyColor>) -> bool {
+     let colors: Vec<Color> = colors.iter().map(PyColor::inner).collect();
+     rule_helpers::take_penalty(&colors)
+ }
+ 
+ /// Sum card points for purchased cards of effective colour `color`.
+ #[pyfunction]
+ pub fn color_points(purchased: Vec<PyPurchasedCard>, color: &PyColor) -> u32 {
+     let purchased: Vec<PurchasedCard> = purchased.iter().map(PurchasedCard::from).collect();
+     rule_helpers::color_points(&purchased, color.inner())
+ }
+ 
+ /// Enumerate distinct discard subsets of `tokens` summing to `excess`.
+ #[pyfunction]
+ pub fn discard_subsets(tokens: &PyTokens, excess: i64) -> Vec<PyTokens> {
+     rule_helpers::discard_subsets((*tokens).into(), excess)
+         .into_iter()
+         .map(PyTokens::from)
+         .collect()
+ }
+ 
+ /// Return true if the player may reserve a card.
+ #[pyfunction]
+ pub fn can_reserve(board: Vec<Option<PyColor>>, reserved_count: i64) -> bool {
+     let board: Vec<Option<Color>> = board
+         .into_iter()
+         .map(|c| c.map(|c| c.inner()))
+         .collect();
+     rule_helpers::can_reserve(&board, reserved_count)
+ }
+ 
+ /// Return all visible cards in contract order.
+ #[pyfunction]
+ pub fn visible_cards(
+     pyramid: Vec<Vec<Option<PyCard>>>,
+     reserved_public: Vec<PyCard>,
+     reserved_deck: Vec<PyCard>,
+ ) -> Vec<PyCard> {
+     let pyramid: Vec<Vec<Option<Card>>> = pyramid
+         .iter()
+         .map(|row| row.iter().map(|c| c.as_ref().map(Card::from)).collect())
+         .collect();
+     let reserved_public: Vec<Card> = reserved_public.iter().map(Card::from).collect();
+     let reserved_deck: Vec<Card> = reserved_deck.iter().map(Card::from).collect();
+     rule_helpers::visible_cards(&pyramid, &reserved_public, &reserved_deck)
+         .iter()
+         .map(PyCard::from)
+         .collect()
+ }
+ 
+ /// Return true if this player meets any win condition.
+ #[pyfunction]
+ pub fn is_winner(player: &PyPlayerState) -> bool {
+     rule_helpers::is_winner(&PlayerState::from(player))
+ }
+ 
+ /// Create a fresh game set up deterministically from `seed`.
+ #[pyfunction]
+ pub fn new_game(seed: i64) -> PyGameState {
+     PyGameState {
+         inner: state_new_game(seed),
+     }
+ }
+ 
+ /// Create an observation from a GameState for a specific player.
 #[pyfunction]
 pub fn observation(state: &PyGameState, player: usize) -> PyResult<PyObservation> {
     if player > 1 {

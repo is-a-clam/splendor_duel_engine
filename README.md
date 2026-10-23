@@ -12,7 +12,8 @@ src/splendor_duel_engine/
   eval/        Arena (head-to-head matches)
   mcts/        MCTS helper functions
   training/    (future) Self-play, replay buffer, network training
-engine_rs/     (future) Rust port of python engine
+  data/        Card data (cards.json)
+  engine_rs/   (future) Rust port of python engine (splendor_duel_engine._core)
 ```
 
 ## Installation
@@ -72,6 +73,37 @@ print(f"Greedy winrate: {result['agent_a_winrate']:.1%}")
 ## Development Commands
 
 ```bash
+# Show all available Make targets
+make help
+
+# Daily development (build + parity tests)
+make dev
+
+# Full verification before commit (build + all tests + lint)
+make verify
+
+# Build Rust extension in release mode (incremental) and install to venv
+make build-dev
+
+# Build Rust extension in debug mode (faster compile) and install to venv
+make build-dev-debug
+
+# Run Rust parity tests only (the gate)
+make test-rust
+
+# Run full test suite
+make test-all
+
+# Lint and format check
+make lint
+
+# First-time setup / after Cargo.lock changes (full rebuild)
+make install-dev
+
+# Clean all build artifacts
+make clean
+
+# Raw commands (if not using Make):
 # Run all tests
 uv run python -m pytest
 

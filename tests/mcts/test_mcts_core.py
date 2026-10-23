@@ -13,14 +13,13 @@ from splendor_duel_engine.engine.actions import (
     decide,
 )
 from splendor_duel_engine.engine.cards import load_cards
-from splendor_duel_engine.engine.colors import Color
+from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.observation import observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import (
+    GameState,
     PlayerState,
     PurchasedCard,
-    Tokens,
-    new_game,
 )
 from splendor_duel_engine.mcts.mcts_core import (
     MCTSNode,
@@ -46,7 +45,7 @@ def _advance_to_mandatory(state):
 
 
 def test_mcts_node_creation():
-    state = new_game(0)
+    state = GameState.new_game(0)
     node = MCTSNode(state=state, parent=None, action=None)
     assert node.visits == 0
     assert node.value == 0.0
@@ -56,19 +55,19 @@ def test_mcts_node_creation():
 
 def test_uct_select_prefers_unvisited():
     # Node with unvisited children should select one of them
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     root = MCTSNode(state=state, parent=None, action=None)
     # Manually populate children with one visited, one unvisited
     dp = decide(state)
     actions = list(dp.legal_actions)
     assert len(actions) >= 2
 
-    child1 = MCTSNode(state=new_game(1), parent=root, action=actions[0])
+    child1 = MCTSNode(state=GameState.new_game(1), parent=root, action=actions[0])
     child1.visits = 1
     child1.value = 1.0
     root.children[actions[0]] = child1
 
-    child2 = MCTSNode(state=new_game(2), parent=root, action=actions[1])
+    child2 = MCTSNode(state=GameState.new_game(2), parent=root, action=actions[1])
     child2.visits = 0
     child2.value = 0.0
     root.children[actions[1]] = child2
@@ -82,20 +81,20 @@ def test_uct_select_prefers_unvisited():
 
 def test_uct_select_balances_exploitation_exploration():
     # Child with high value but many visits vs low value few visits
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     root = MCTSNode(state=state, parent=None, action=None)
     dp = decide(state)
     actions = list(dp.legal_actions)
     assert len(actions) >= 2
 
     # Child with high win rate but many visits
-    child1 = MCTSNode(state=new_game(1), parent=root, action=actions[0])
+    child1 = MCTSNode(state=GameState.new_game(1), parent=root, action=actions[0])
     child1.visits = 100
     child1.value = 90.0  # 90% win rate
     root.children[actions[0]] = child1
 
     # Child with lower win rate but very few visits
-    child2 = MCTSNode(state=new_game(2), parent=root, action=actions[1])
+    child2 = MCTSNode(state=GameState.new_game(2), parent=root, action=actions[1])
     child2.visits = 2
     child2.value = 1.0  # 50% win rate
     root.children[actions[1]] = child2
@@ -113,7 +112,7 @@ def test_uct_select_balances_exploitation_exploration():
 
 
 def test_expand_creates_valid_child():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     node = MCTSNode(state=state, parent=None, action=None)
     # Manually populate untried_actions from decide(state).legal_actions
     dp = decide(state)
@@ -129,7 +128,7 @@ def test_expand_creates_valid_child():
 
 
 def test_playout_returns_valid_result():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     result = playout(state, random.Random(0), playout_policy="random")
     assert 0.0 <= result <= 1.0
 
@@ -139,17 +138,17 @@ def test_playout_handles_multiple_replenishes():
     # resample from the current bag (which includes tokens spent since last replenish)
     # This test verifies the engine's apply handles this correctly.
     # For MCTS core, we just verify playout terminates and returns valid value.
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     result = playout(state, random.Random(0), playout_policy="random")
     assert 0.0 <= result <= 1.0
 
 
 def test_backpropagate_updates_path():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     root = MCTSNode(state=state, parent=None, action=None)
     dp = decide(state)
     some_action = dp.legal_actions[0]
-    child = MCTSNode(state=new_game(1), parent=root, action=some_action)
+    child = MCTSNode(state=GameState.new_game(1), parent=root, action=some_action)
     root.children[some_action] = child
     backpropagate(child, 1.0)
     assert child.visits == 1
@@ -159,11 +158,11 @@ def test_backpropagate_updates_path():
 
 
 def test_backpropagate_partial_result():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     root = MCTSNode(state=state, parent=None, action=None)
     dp = decide(state)
     some_action = dp.legal_actions[0]
-    child = MCTSNode(state=new_game(1), parent=root, action=some_action)
+    child = MCTSNode(state=GameState.new_game(1), parent=root, action=some_action)
     root.children[some_action] = child
     backpropagate(child, 0.5)
     assert child.visits == 1
@@ -173,7 +172,7 @@ def test_backpropagate_partial_result():
 
 
 def test_mcts_search_returns_legal_action():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     obs = observation(state, 0)
     det_state = determinize(obs, random.Random(0))
     visits = mcts_search(det_state, random.Random(0), max_playouts=100)
@@ -185,7 +184,7 @@ def test_mcts_search_returns_legal_action():
 
 
 def test_mcts_search_deterministic_with_same_seed():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     obs = observation(state, 0)
     det = determinize(obs, random.Random(0))
     a1 = mcts_search(det, random.Random(42), max_playouts=200)
@@ -195,7 +194,7 @@ def test_mcts_search_deterministic_with_same_seed():
 
 def test_mcts_search_handles_terminal_state():
     # If the root is already terminal, search should raise an error (not a valid use case)
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     terminal_state = replace(state, winner=0)
     try:
         mcts_search(terminal_state, random.Random(0), max_playouts=10)
@@ -205,7 +204,7 @@ def test_mcts_search_handles_terminal_state():
 
 
 def test_mcts_search_with_greedy_policy():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     obs = observation(state, 0)
     det_state = determinize(obs, random.Random(0))
     visits = mcts_search(
@@ -217,7 +216,7 @@ def test_mcts_search_with_greedy_policy():
 
 
 def test_mcts_node_is_terminal():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     node = MCTSNode(state=state, parent=None, action=None)
     assert not node.is_terminal()
 
@@ -227,7 +226,7 @@ def test_mcts_node_is_terminal():
 
 
 def test_mcts_node_is_fully_expanded():
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     node = MCTSNode(state=state, parent=None, action=None)
     assert not node.is_fully_expanded()  # untried_actions is None -> not fully expanded
 
@@ -246,7 +245,7 @@ def test_expand_auto_expands_forced_moves():
     (USE_PRIVILEGES -> DONE_WITH_PRIVILEGES -> REPLENISH -> DONE_WITH_REPLENISH)
     and create children at the MANDATORY phase where real decisions happen.
     """
-    state = new_game(0)
+    state = GameState.new_game(0)
     root = MCTSNode(state=state, parent=None, action=None)
 
     # Initial state is USE_PRIVILEGES with only one legal action: DoneWithPrivileges
@@ -298,7 +297,7 @@ def test_playout_from_near_terminal_state():
 
     # Build a minimal state where player 0 is about to win
     # Player 0 has 19 prestige, the cheap card is in the pyramid, and they can afford it
-    base_state = new_game(0)
+    base_state = GameState.new_game(0)
 
     # Advance to MANDATORY phase
     state = replace(base_state, phase=Phase.USE_PRIVILEGES)
@@ -371,7 +370,7 @@ def test_playout_from_near_terminal_state():
 
 def test_heuristic_evaluation_returns_valid_range():
     """Test that _heuristic_evaluation returns a value in [0, 1]."""
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     # Test from both perspectives
     for perspective in (0, 1):
         value = _heuristic_evaluation(state, perspective)
@@ -382,7 +381,7 @@ def test_heuristic_evaluation_returns_valid_range():
 
 def test_heuristic_evaluation_symmetric():
     """Test that heuristic evaluation is symmetric (v1 = 1 - v2 for zero-sum)."""
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     v0 = _heuristic_evaluation(state, 0)
     v1 = _heuristic_evaluation(state, 1)
     # For the initial symmetric state, both should be 0.5
@@ -399,7 +398,7 @@ def test_heuristic_evaluation_favors_leading_player():
     from splendor_duel_engine.engine.cards import Card
 
     # Create a state where player 0 is clearly winning
-    base_state = _advance_to_mandatory(new_game(0))
+    base_state = _advance_to_mandatory(GameState.new_game(0))
 
     # Give player 0 more prestige and crowns
     player0 = PlayerState(
@@ -450,7 +449,7 @@ def test_heuristic_evaluation_favors_leading_player():
 
 def test_playout_respects_max_depth():
     """Test that playout respects the max_depth parameter."""
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
 
     # With max_depth=0, should immediately return heuristic evaluation
     result_depth0 = playout(
@@ -479,7 +478,7 @@ def test_playout_limited_depth_vs_full():
     play_game_from_state. This test verifies that limited-depth playout produces
     valid results and terminates quickly.
     """
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
 
     # Run several limited-depth playouts
     results = []
@@ -494,7 +493,7 @@ def test_playout_limited_depth_vs_full():
 
 def test_mcts_search_with_max_depth():
     """Test that mcts_search accepts and uses the max_depth parameter."""
-    state = _advance_to_mandatory(new_game(0))
+    state = _advance_to_mandatory(GameState.new_game(0))
     obs = observation(state, 0)
     det_state = determinize(obs, random.Random(0))
 

@@ -28,13 +28,12 @@ from splendor_duel_engine.engine.state import (
     PlayerState,
     PurchasedCard,
     ReservedCard,
-    new_game,
 )
 
 
 def board_state(**kwargs) -> GameState:
     """Build a state from a fixed seed with overrides (suite-wide pattern)."""
-    return replace(new_game(0), **kwargs)
+    return replace(GameState.new_game(0), **kwargs)
 
 
 def _player(**kwargs) -> PlayerState:

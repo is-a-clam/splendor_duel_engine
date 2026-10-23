@@ -18,7 +18,7 @@ from splendor_duel_engine.engine.actions import (
 from splendor_duel_engine.engine.cards import Ability, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
+from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 
 def _setup_buy_state(base_st: GameState, player: int = 0) -> tuple[GameState, object]:
@@ -59,7 +59,7 @@ def _complete_buy(st: GameState, card) -> GameState:
 class TestExtraTurn:
     def test_extra_turn_same_player_plays_again(self):
         """EXTRA_TURN ability: after purchase, same player gets another turn (USE_PRIVILEGES)."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         # Find a card with extra_turn ability - L1-01
         base_st.pyramid[0][0]  # Check this has extra_turn
         # L1-01 has extra_turn but let's find it properly
@@ -110,7 +110,7 @@ class TestExtraTurn:
 
     def test_extra_turn_flag_cleared_after_extra_turn_used(self):
         """The extra_turn flag is set on purchase, then cleared after the extra turn completes."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         extra_turn_card = next(
             c for c in jewels if c.ability == Ability.EXTRA_TURN and c.level == 1
@@ -150,7 +150,7 @@ class TestExtraTurn:
 class TestTakeMatchingToken:
     def test_take_matching_token_chooses_from_board(self):
         """TAKE_MATCHING_TOKEN: enters TAKE_MATCHING_TOKEN phase, player chooses which token to take."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a card with take_matching_token ability - L1-02 (bonus=black)
         take_match_card = next(
@@ -210,7 +210,7 @@ class TestTakeMatchingToken:
 
     def test_take_matching_token_ignored_when_absent(self):
         """TAKE_MATCHING_TOKEN: ignored (no error) if no token of that color on board."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         take_match_card = next(
             c
@@ -248,7 +248,7 @@ class TestTakeMatchingToken:
 class TestPrivilegeAbility:
     def test_privilege_ability_grants_privilege(self):
         """PRIVILEGE ability: grants 1 privilege to buyer via _grant_privilege."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a card with privilege ability - L2-12 (bonus=black)
         priv_card = next(
@@ -284,7 +284,7 @@ class TestPrivilegeAbility:
 class TestStealToken:
     def test_steal_takes_chosen_non_gold_opponent_token_and_cannot_steal_gold(self):
         """STEAL_TOKEN: enters STEAL_TOKEN phase, player chooses non-gold token from opponent; gold immune."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         steal_card = next(
             c
@@ -349,7 +349,7 @@ class TestStealToken:
 
     def test_steal_ignored_when_opponent_has_no_tokens(self):
         """STEAL_TOKEN: if opponent has no non-gold tokens, ability is ignored (no phase)."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         steal_card = next(
             c
@@ -384,7 +384,7 @@ class TestStealToken:
 class TestMulticolor:
     def test_multicolor_choose_color_adds_bonus_and_counts_for_that_color(self):
         """MULTICOLOR_COLOR: player chooses color; bonus_count added to that color; prestige counts toward that color."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a multicolor card with bonus_count=1 - L1-18
         multi_card = next(
@@ -452,7 +452,7 @@ class TestMulticolor:
 
     def test_multicolor_copies_only_bonus_not_ability(self):
         """Multicolor copies the bonus, never an ability: multicolor-only card fires no extra ability."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a multicolor card with NO ability - L1-18
         multi_card = next(
@@ -492,7 +492,7 @@ class TestMulticolor:
 
     def test_multicolor_with_extra_turn_still_plays_again(self):
         """L3-01 (multicolor + extra_turn) still grants extra turn (Ruling R3)."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # L3-01 is multicolor AND has extra_turn
         multi_extra_card = next(c for c in jewels if c.id == "L3-01")
@@ -532,7 +532,7 @@ class TestMulticolor:
 class TestAbilityResolutionOrder:
     def test_bought_card_ability_resolves_before_next_player_turns(self):
         """Abilities resolve in fixed order before turn passes to next player."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a card with multiple abilities? Cards have at most one printed ability.
         # But multicolor + ability combination tests the order.
@@ -572,7 +572,7 @@ class TestAbilityResolutionOrder:
 
     def test_multicolor_then_steal_token_order(self):
         """MULTICOLOR_COLOR resolves before STEAL_TOKEN; multicolor card without STEAL_TOKEN skips steal phase."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a multicolor card (e.g., L1-24) - these don't have STEAL_TOKEN
         multicolor_card = next(
@@ -618,7 +618,7 @@ class TestAbilityResolutionOrder:
 
     def test_steal_token_ability_check_gated(self):
         """STEAL_TOKEN phase only entered when card has the ability, not just multicolor."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         # Find a multicolor card WITHOUT STEAL_TOKEN
         multicolor_no_steal = next(
@@ -660,7 +660,7 @@ class TestAbilityResolutionOrder:
 class TestPendingAbilityField:
     def test_pending_ability_stores_steal_token_during_choice(self):
         """pending_ability field stores STEAL_TOKEN during the choice phase."""
-        base_st = new_game(0)
+        base_st = GameState.new_game(0)
         jewels, _ = load_cards()
         steal_card = next(
             c

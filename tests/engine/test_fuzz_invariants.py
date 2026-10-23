@@ -8,7 +8,7 @@ import pytest
 from splendor_duel_engine.engine.actions import Action, TakeTokens, apply, decide
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, PlayerState, new_game
+from splendor_duel_engine.engine.state import GameState, PlayerState
 
 SEEDS = range(50)
 
@@ -42,7 +42,7 @@ def test_random_games_terminate_with_exactly_one_winner(seed):
 def test_replay_from_clone_reproduces_final_state(seed):
     """Invariant 5: replaying the action sequence reproduces the final state."""
     st, actions = _play_random_game(seed)
-    clone = copy.deepcopy(new_game(seed))
+    clone = copy.deepcopy(GameState.new_game(seed))
     replayed = _replay(clone, actions)
     assert replayed == st
 
@@ -50,7 +50,7 @@ def test_replay_from_clone_reproduces_final_state(seed):
 @pytest.mark.parametrize("seed", SEEDS)
 def test_apply_does_not_mutate_input_rng(seed):
     """Invariant 5: ``apply`` never advances the caller's RNG."""
-    st = new_game(seed)
+    st = GameState.new_game(seed)
     for _ in range(60):
         if st.winner is not None:
             break
@@ -167,7 +167,7 @@ def _play_random_game(
     a winner within ``max_steps`` plies.
     """
     rng = random.Random(seed)
-    start = new_game(seed)
+    start = GameState.new_game(seed)
     st = start
     actions: list[Action] = []
     step = 0

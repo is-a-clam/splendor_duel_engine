@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 
 #: Packaged card data, loaded by :func:`load_cards` when no path is given.
-#: Assumes repo layout: <repo>/data/cards.json (run from repo root with uv/python -m).
-CARDS_PATH: pathlib.Path = pathlib.Path(__file__).parents[3] / "data" / "cards.json"
+#: Assumes repo layout: <repo>/src/splendor_duel_engine/data/cards.json
+CARDS_PATH: pathlib.Path = pathlib.Path(__file__).parents[1] / "data" / "cards.json"
 
 # Cost keys are the five gems plus pearls; gold is wild and never a card cost.
 _COST_KEYS: frozenset[str] = frozenset(color.value for color in GEM_COLORS) | {

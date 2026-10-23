@@ -5,12 +5,12 @@ from __future__ import annotations
 from splendor_duel_engine.agents.mcts_agent import MCTSAgent
 from splendor_duel_engine.engine.actions import decide
 from splendor_duel_engine.engine.observation import observation
-from splendor_duel_engine.engine.state import new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def test_mcts_agent_chooses_legal_action():
     agent = MCTSAgent(seed=42, max_playouts=100)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
@@ -20,7 +20,7 @@ def test_mcts_agent_chooses_legal_action():
 def test_mcts_agent_deterministic_with_same_seed():
     agent1 = MCTSAgent(seed=123, max_playouts=200)
     agent2 = MCTSAgent(seed=123, max_playouts=200)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     a1 = agent1.choose_action(obs, dp.legal_actions)
@@ -39,7 +39,7 @@ def test_mcts_agent_different_seeds_different_actions():
     )
     from splendor_duel_engine.engine.phase import Phase
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     state = apply(state, DoneWithPrivileges())
     state = apply(state, DoneWithReplenish())
     assert state.phase == Phase.MANDATORY
@@ -68,7 +68,7 @@ def test_mcts_agent_full_game_terminates():
 def test_mcts_agent_respects_max_playouts():
     # With very low playouts, should still return a legal action
     agent = MCTSAgent(seed=0, max_playouts=10)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
@@ -77,7 +77,7 @@ def test_mcts_agent_respects_max_playouts():
 
 def test_mcts_agent_random_playout_policy():
     agent = MCTSAgent(seed=42, max_playouts=100, playout_policy="random")
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
@@ -88,7 +88,7 @@ def test_mcts_agent_re_determinizes_each_decision():
     # Two calls with same Observation but different internal RNG state
     # should produce different determinizations and potentially different actions
     agent = MCTSAgent(seed=0, max_playouts=200)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     # Run multiple trials; re-determinization should produce varied actions.
@@ -144,7 +144,7 @@ def test_mcts_agent_multi_sample_differs_from_single():
     )
     from splendor_duel_engine.engine.phase import Phase
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     # Player 1 (first player) does MANDATORY setup
     state = apply(state, DoneWithPrivileges())
     state = apply(state, DoneWithReplenish())
@@ -215,14 +215,14 @@ def test_mcts_agent_runs_mcts_for_non_mandatory_phases():
     from splendor_duel_engine.engine.phase import Phase
 
     # Create a state where the player can reserve a card (enters CHOOSE_GOLD phase)
-    state = new_game(0)
+    state = GameState.new_game(0)
     # Advance to MANDATORY
     from splendor_duel_engine.engine.actions import (
         DoneWithPrivileges,
         DoneWithReplenish,
     )
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     state = apply(state, DoneWithPrivileges())
     state = apply(state, DoneWithReplenish())
     # Now in MANDATORY, reserve from pyramid
@@ -250,7 +250,7 @@ def test_mcts_agent_runs_mcts_for_non_mandatory_phases():
 def test_mcts_agent_backward_compat_num_determinizations_one():
     """num_determinizations=1 should behave like the old single-sample MCTS."""
     agent = MCTSAgent(seed=42, max_playouts=100, num_determinizations=1)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)

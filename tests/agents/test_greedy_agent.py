@@ -22,13 +22,13 @@ from splendor_duel_engine.engine.cards import Ability, Card, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
+from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 EMPTY_PYRAMID = ((None,) * 3, (None,) * 4, (None,) * 5)
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
@@ -56,7 +56,7 @@ def synthetic_card(
 
 def _observation_with_visible_card(card: Card, tokens: Tokens) -> Observation:
     """An observation whose only visible card is ``card`` for the active player."""
-    st = new_game(0)
+    st = GameState.new_game(0)
     st = replace(
         st,
         current_player=0,
@@ -73,7 +73,7 @@ def _observation_with_visible_card(card: Card, tokens: Tokens) -> Observation:
 def test_greedy_agent_chooses_legal_action():
     agent = GreedyAgent()
     assert isinstance(agent, Agent)
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
@@ -83,7 +83,7 @@ def test_greedy_agent_chooses_legal_action():
 def test_greedy_agent_deterministic():
     agent1 = GreedyAgent()
     agent2 = GreedyAgent()
-    state = new_game(42)
+    state = GameState.new_game(42)
     # Play a few turns and verify same choices
     for _ in range(5):
         if state.winner is not None:

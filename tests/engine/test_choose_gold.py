@@ -12,11 +12,11 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
@@ -142,7 +142,7 @@ def test_choose_gold_invalid_index_raises():
 
 def test_choose_gold_pyramid_refills():
     """After completing reserve from pyramid, the slot refills from deck."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Ensure gold on board
     board = list(base_st.board)
     board[0] = Color.GOLD
@@ -173,7 +173,7 @@ def test_choose_gold_pyramid_refills():
 
 def test_choose_gold_deck_reserve_does_not_refill():
     """After completing reserve from deck, pyramid is unchanged."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     board = list(base_st.board)
     board[0] = Color.GOLD
     st = replace(base_st, board=tuple(board), current_player=0, phase=Phase.MANDATORY)

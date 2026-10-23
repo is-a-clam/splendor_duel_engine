@@ -19,13 +19,15 @@ pub mod state;
 use crate::cards::load_cards as rs_load_cards;
 use crate::helpers::{COLOR_WIN_POINTS, CROWNS_WIN, MAX_RESERVED, PRESTIGE_WIN, TOKEN_LIMIT};
 use crate::py::{
-    apply, can_afford_card, can_reserve, color_points, cost_deficits, decide, discard_subsets,
-    is_winner, legal_payments, new_game, observation as py_observation, take_penalty,
-    visible_cards, PyAbility, PyBuyCard, PyCard, PyChooseGold, PyChooseMatchingToken,
-    PyChooseMulticolor, PyChooseRoyal, PyChooseStealToken, PyColor, PyDecisionPoint,
-    PyDiscardTokens, PyDoneWithPrivileges, PyDoneWithReplenish, PyGameState, PyObservation,
-    PyPayTokens, PyPhase, PyPlayerState, PyPlayerView, PyPurchasedCard, PyRandom, PyReplenish,
-    PyReserveCard, PyReservedCard, PyRoyalCard, PyTakeTokens, PyTokens, PyUsePrivilege,
+    apply, can_afford_card, can_reserve, color_points, cost_deficits, decide,
+    discard_subsets, is_winner, legal_payments, new_game, observation as py_observation,
+    take_penalty, visible_cards, PyAbility, PyBuyCard, PyCard, PyChooseGold,
+    PyChooseMatchingToken, PyChooseMulticolor, PyChooseRoyal, PyChooseStealToken,
+    PyColor, PyDecisionPoint, PyDiscardTokens, PyDoneWithPrivileges,
+    PyDoneWithReplenish, PyGameState, PyObservation, PyPayTokens, PyPhase,
+    PyPlayerState, PyPlayerView, PyPurchasedCard, PyRandom, PyReplenish,
+    PyReserveCard, PyReservedCard, PyRoyalCard, PyTakeTokens, PyTokens,
+    PyUsePrivilege,
 };
 
 /// The version of the extension module.
@@ -62,7 +64,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(__version__, m)?)?;
     m.add_function(wrap_pyfunction!(load_cards, m)?)?;
     m.add_function(wrap_pyfunction!(gem_colors, m)?)?;
-    m.add_function(wrap_pyfunction!(new_game, m)?)?;
     m.add_function(wrap_pyfunction!(py_observation, m)?)?;
     m.add_function(wrap_pyfunction!(decide, m)?)?;
     m.add_function(wrap_pyfunction!(apply, m)?)?;
@@ -124,14 +125,12 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     helpers_mod.add_function(wrap_pyfunction!(discard_subsets, &helpers_mod)?)?;
     helpers_mod.add_function(wrap_pyfunction!(can_reserve, &helpers_mod)?)?;
     helpers_mod.add_function(wrap_pyfunction!(visible_cards, &helpers_mod)?)?;
+    helpers_mod.add_function(wrap_pyfunction!(is_winner, &helpers_mod)?)?;
     m.add_submodule(&helpers_mod)?;
     m.py()
         .import("sys")?
         .getattr("modules")?
         .set_item("splendor_duel_engine._core.helpers", &helpers_mod)?;
-
-    // Win check lives at the top level (`_core.is_winner`).
-    m.add_function(wrap_pyfunction!(is_winner, m)?)?;
 
     Ok(())
 }

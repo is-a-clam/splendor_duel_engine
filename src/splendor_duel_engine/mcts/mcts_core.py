@@ -8,11 +8,15 @@ from dataclasses import dataclass, field
 
 from splendor_duel_engine.agents.greedy_agent import GreedyAgent
 from splendor_duel_engine.agents.random_agent import RandomAgent
-from splendor_duel_engine.engine import helpers
-from splendor_duel_engine.engine.actions import Action, apply, decide
-from splendor_duel_engine.engine.colors import GEM_COLORS
-from splendor_duel_engine.engine.observation import observation
-from splendor_duel_engine.engine.state import GameState
+from splendor_duel_engine.engine_api import (
+    GEM_COLORS,
+    Action,
+    GameState,
+    apply,
+    decide,
+    helpers,
+    observation,
+)
 
 # Factory functions for playout policies to ensure fresh RNG per playout.
 # Both are callables accepting a seed derived from the MCTS RNG.

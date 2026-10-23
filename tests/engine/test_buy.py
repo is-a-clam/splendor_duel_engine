@@ -18,18 +18,18 @@ from splendor_duel_engine.engine.actions import (
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.helpers import can_afford_card
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
+from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
 def test_payment_respects_bonuses_and_never_goes_below_zero():
     """Payment subtracts per-gem bonuses (min 0 per color)."""
     # Use L3-09: cost has green=6, blue=2, red=2, bonus=GREEN
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     card = base_st.pyramid[0][1]  # L3-09
     assert card is not None and card.bonus == Color.GREEN and card.cost.green > 0
 
@@ -78,7 +78,7 @@ def test_payment_respects_bonuses_and_never_goes_below_zero():
 
 def test_pearl_cost_never_reduced():
     """Pearl costs are never reduced by bonuses."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Use L3-03: cost has pearl=1, bonus=BLUE
     card = base_st.pyramid[0][0]  # L3-03
     assert card is not None and card.cost.pearl > 0
@@ -127,7 +127,7 @@ def test_pearl_cost_never_reduced():
 
 def test_gold_pays_as_any_color_or_pearl():
     """Gold is wild and can substitute for any color or pearl."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Use L1-27: cost=white=2, blue=3, bonus=RED. Total cost=5.
     card = base_st.pyramid[2][0]  # L1-27
     assert card is not None
@@ -171,7 +171,7 @@ def test_gold_pays_as_any_color_or_pearl():
 
 def test_pyramid_purchase_refills_from_deck_or_stays_empty_when_deck_empty():
     """Buying from pyramid refills the slot from that level's deck; if deck empty, stays empty."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Use L1-27 from pyramid (level 1 row)
     card = base_st.pyramid[2][0]
     assert card is not None
@@ -211,7 +211,7 @@ def test_pyramid_purchase_refills_from_deck_or_stays_empty_when_deck_empty():
 
 def test_reserved_purchase_does_not_refill():
     """Buying a reserved card does not refill any pyramid slot."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     card = base_st.pyramid[0][1]  # L3-09
     assert card is not None
 
@@ -252,7 +252,7 @@ def test_reserved_purchase_does_not_refill():
 
 def test_spent_tokens_go_to_bag():
     """Spent tokens (including gold) go from hand to bag."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     card = base_st.pyramid[2][0]  # L1-27, cost=5
     assert card is not None
 
@@ -292,7 +292,7 @@ def test_spent_tokens_go_to_bag():
 
 def test_buy_grants_bonus_prestige_crowns():
     """Purchasing a card grants its bonus, prestige points, and crowns."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Find a card with bonus, points, and crowns - L3-03 has points=3, crowns=2, bonus=BLUE
     card = base_st.pyramid[0][0]  # L3-03
     assert (
@@ -342,7 +342,7 @@ def test_buy_grants_bonus_prestige_crowns():
 
 def test_multicolor_cannot_be_bought_without_colored_bonus():
     """Cannot buy a multicolor card unless player owns at least one colored bonus."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Find a multicolor card in pyramid - L1-24
     card = base_st.pyramid[2][2]  # L1-24
     assert card is not None and card.is_multicolor
@@ -392,7 +392,7 @@ def test_multicolor_cannot_be_bought_without_colored_bonus():
 
 def test_choose_payment_phase_offers_only_legal_payments():
     """CHOOSE_PAYMENT phase enumerates only legal PayTokens actions."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     card = base_st.pyramid[2][0]  # L1-27, cost=white=2, blue=3
     assert card is not None
 
@@ -443,7 +443,7 @@ def test_choose_payment_phase_offers_only_legal_payments():
 def test_reserve_buy_chain_gold_reaches_bag_and_board_refill_can_redeploy_it():
     """Review Focus 1: reserve (gold to hand) -> buy with gold -> gold in bag -> replenish -> gold back on board."""
     # Start with a known state
-    st = new_game(42)
+    st = GameState.new_game(42)
 
     # Ensure exactly one gold on board for reserve
     board: list[Color | None] = [None] * 25

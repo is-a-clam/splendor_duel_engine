@@ -14,11 +14,11 @@ import pytest
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.cards import load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def test_setup_matches_spec():
-    st = new_game(seed=0)
+    st = GameState.new_game(seed=0)
     assert st.board[12] is not None and all(
         c is not None for c in st.board
     )  # board full (25 tokens)
@@ -32,23 +32,23 @@ def test_setup_matches_spec():
 
 
 def test_token_census_on_board():
-    st = new_game(seed=0)
+    st = GameState.new_game(seed=0)
     census = Counter(st.board)
     assert census[Color.GOLD] == 3 and census[Color.PEARL] == 2
     assert all(census[c] == 4 for c in GEM_COLORS)
 
 
 def test_setup_is_deterministic_given_seed():
-    a, b = new_game(seed=42), new_game(seed=42)
+    a, b = GameState.new_game(seed=42), GameState.new_game(seed=42)
     assert a == b
     assert a.board == b.board and a.decks == b.decks
     assert (
-        new_game(seed=43).board != a.board
+        GameState.new_game(seed=43).board != a.board
     )  # different seed shuffles differently (extremely likely)
 
 
 def test_first_player_is_random_but_reproducible():
-    assert new_game(seed=1).current_player == new_game(seed=1).current_player
+    assert GameState.new_game(seed=1).current_player == GameState.new_game(seed=1).current_player
 
 
 # --- Rulings pinned for this task (spiral deal, deck top = end, RNG order) ---
@@ -128,7 +128,7 @@ def _replay_setup(seed: int):
 
 
 def test_spiral_deal_and_deck_top_match_pinned_rng_order():
-    st = new_game(seed=7)
+    st = GameState.new_game(seed=7)
     board, decks, pyramid, tops, first = _replay_setup(seed=7)
     assert st.board == board
     assert st.decks == decks
@@ -141,7 +141,7 @@ def test_spiral_deal_and_deck_top_match_pinned_rng_order():
 
 
 def test_pyramid_and_decks_partition_each_level():
-    st = new_game(seed=3)
+    st = GameState.new_game(seed=3)
     expected = {1: 30, 2: 24, 3: 13}
     for level, deck in zip((3, 2, 1), st.decks, strict=True):
         row = st.pyramid[3 - level]
@@ -152,7 +152,7 @@ def test_pyramid_and_decks_partition_each_level():
 
 
 def test_pyramid_rows_have_level_matching_cards():
-    st = new_game(seed=11)
+    st = GameState.new_game(seed=11)
     for level, deck, row_length in zip((3, 2, 1), st.decks, (3, 4, 5), strict=True):
         row = st.pyramid[3 - level]
         assert len(row) == row_length
@@ -162,17 +162,17 @@ def test_pyramid_rows_have_level_matching_cards():
 
 @pytest.mark.parametrize("seed", [0, 1, 42, 2**63 - 1, 987654321012345678])
 def test_extreme_seeds_reproduce(seed: int):
-    assert new_game(seed) == new_game(seed)
+    assert GameState.new_game(seed) == GameState.new_game(seed)
 
 
 def test_rng_is_excluded_from_state_equality():
-    a, b = new_game(seed=5), new_game(seed=5)
+    a, b = GameState.new_game(seed=5), GameState.new_game(seed=5)
     assert a == b
     assert a.rng is not b.rng  # equality ignores the RNG, identity does not
 
 
 def test_initial_players_are_empty():
-    st = new_game(seed=0)
+    st = GameState.new_game(seed=0)
     for player in st.players:
         assert player.tokens.total() == 0
         assert player.bonus.total() == 0  # bonuses hold gem counts only
@@ -184,4 +184,4 @@ def test_initial_players_are_empty():
 
 
 def test_new_game_returns_game_state_type():
-    assert isinstance(new_game(seed=0), GameState)
+    assert isinstance(GameState.new_game(seed=0), GameState)

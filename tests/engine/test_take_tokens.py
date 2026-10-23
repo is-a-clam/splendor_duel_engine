@@ -5,14 +5,14 @@ import pytest
 from splendor_duel_engine.engine.actions import TakeTokens, apply, decide
 from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def board_state(**kwargs) -> GameState:
     # ``new_game`` now opens in USE_PRIVILEGES; these tests exercise the
     # MANDATORY-phase take-token mask, so state the phase explicitly.
     kwargs.setdefault("phase", Phase.MANDATORY)
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
@@ -130,7 +130,7 @@ def test_take_token_mask_has_no_reverse_duplicates(seed):
     canonicalisation the same physical line appears as both ``(A, B)`` and
     ``(B, A)``. Distinctness is per token-cell set, not per index tuple.
     """
-    st = replace(new_game(seed), phase=Phase.MANDATORY)
+    st = replace(GameState.new_game(seed), phase=Phase.MANDATORY)
     lines = _take_lines(st)
     assert lines  # the full 25-token board always offers something
     cell_sets = [frozenset(line) for line in lines]

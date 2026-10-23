@@ -13,17 +13,17 @@ from splendor_duel_engine.engine.actions import (
 from splendor_duel_engine.engine.cards import Ability, RoyalCard, load_cards
 from splendor_duel_engine.engine.colors import Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, ReservedCard, new_game
+from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
 def test_third_crown_grants_royal_choice():
     """Acquiring 3rd crown triggers CHOOSE_ROYAL phase."""
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     jewels, _royals = load_cards()
     card = None
     for c in jewels:
@@ -62,7 +62,7 @@ def test_third_crown_grants_royal_choice():
 
 
 def test_sixth_crown_grants_second_royal():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     jewels, _royals = load_cards()
     card = None
     for c in jewels:
@@ -105,7 +105,7 @@ def test_max_two_royals_per_player():
     The player's royal count is not stored on ``PlayerState``, so it is inferred
     from the ``royals_available`` shrink plus the extra prestige granted.
     """
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     jewels, _royals = load_cards()
     crown_card = next(c for c in jewels if c.id == "L2-19")  # grants 1 crown
     assert crown_card.crowns == 1
@@ -216,7 +216,7 @@ def test_max_two_royals_per_player():
 
 
 def test_royal_ability_resolves():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Put player in CHOOSE_ROYAL state with a royal that has steal ability
     st = replace(
         base_st,
@@ -236,7 +236,7 @@ def test_royal_ability_resolves():
 
 
 def test_royal_gives_prestige_but_neither_crown_nor_bonus():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     st = replace(
         base_st,
         current_player=0,
@@ -256,7 +256,7 @@ def test_royal_gives_prestige_but_neither_crown_nor_bonus():
 
 
 def test_no_royal_available_skips_choice():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     jewels, _royals = load_cards()
     card = None
     for c in jewels:
@@ -297,7 +297,7 @@ def test_multicolor_purchase_crossing_crown_threshold_grants_royal():
     be dropped: after the colour resolves the engine enters CHOOSE_ROYAL, and
     choosing a royal grants its prestige.
     """
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     jewels, _royals = load_cards()
     card = None
     for c in jewels:

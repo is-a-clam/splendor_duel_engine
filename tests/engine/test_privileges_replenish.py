@@ -16,11 +16,11 @@ from splendor_duel_engine.engine.actions import (
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 

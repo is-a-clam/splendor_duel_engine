@@ -5,9 +5,15 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from splendor_duel_engine.engine.cards import Card, load_cards
-from splendor_duel_engine.engine.observation import Observation, PlayerView
-from splendor_duel_engine.engine.state import GameState, PlayerState, ReservedCard
+from splendor_duel_engine.engine_api import (
+    Card,
+    GameState,
+    Observation,
+    PlayerState,
+    PlayerView,
+    ReservedCard,
+    load_cards,
+)
 
 # Total cards per level (from rules)
 TOTAL_PER_LEVEL = {1: 30, 2: 24, 3: 13}
@@ -54,11 +60,12 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
             observation.opponent, is_current=False, reserved_hidden=opp_reserved
         )
 
-    # --- Create fresh RNG for this determinization (split from input) ---
-    det_rng = random.Random(rng.randint(0, 2**31 - 1))
+    # --- Split a fresh seed for this determinization (from the input RNG) ---
+    det_seed = rng.randint(0, 2**31 - 1)
 
     # --- Build GameState ---
-    return GameState(
+    return GameState.from_seed(
+        seed=det_seed,
         players=(player0, player1),
         board=observation.board,
         bag=observation.bag,
@@ -74,7 +81,6 @@ def determinize(observation: Observation, rng: random.Random) -> GameState:
         pending_reserve=observation.pending_reserve,
         pending_ability=observation.pending_ability,
         pending_royal=observation.pending_royal,
-        rng=det_rng,
     )
 
 

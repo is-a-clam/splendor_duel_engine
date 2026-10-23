@@ -208,68 +208,72 @@ class GameState:
             privileges_supply=new_supply,
         )
 
+    # ===== Factory classmethods =====
 
-def new_game(seed: int) -> GameState:
-    """Return a fresh game set up deterministically from ``seed``.
+    @classmethod
+    def new_game(cls, seed: int) -> GameState:
+        """Create a fresh game state from seed (the standard entry point)."""
+        rng = random.Random(seed)
+        jewels, royals = load_cards()
 
-    RNG consumption is pinned for reproducibility: (a) shuffle decks level 1,
-    then 2, then 3; (b) deal the pyramid; (c) shuffle the 25-token supply and
-    deal it along :data:`SPIRAL`; (d) choose the first player.
-    """
-    rng = random.Random(seed)
-    jewels, royals = load_cards()
+        # (a) Shuffle each deck separately, level 1 then 2 then 3 (pinned RNG
+        # order). Each shuffled list is stored so decks[0/1/2] is level 3/2/1,
+        # matching the pyramid rows; the deck top is the last element.
+        shuffled: dict[int, list[Card]] = {}
+        for level in (1, 2, 3):
+            level_cards = [card for card in jewels if card.level == level]
+            rng.shuffle(level_cards)
+            shuffled[level] = level_cards
+        decks = [shuffled[3], shuffled[2], shuffled[1]]
 
-    # (a) Shuffle each deck separately, level 1 then 2 then 3 (pinned RNG
-    # order). Each shuffled list is stored so decks[0/1/2] is level 3/2/1,
-    # matching the pyramid rows; the deck top is the last element.
-    shuffled: dict[int, list[Card]] = {}
-    for level in (1, 2, 3):
-        level_cards = [card for card in jewels if card.level == level]
-        rng.shuffle(level_cards)
-        shuffled[level] = level_cards
-    decks = [shuffled[3], shuffled[2], shuffled[1]]
+        # (b) Deal the pyramid, each row left-to-right from its deck's top.
+        pyramid = tuple(
+            tuple(decks[deck_index].pop() for _ in range(row_length))
+            for row_length, deck_index in _PYRAMID_LAYOUT
+        )
 
-    # (b) Deal the pyramid, each row left-to-right from its deck's top.
-    pyramid = tuple(
-        tuple(decks[deck_index].pop() for _ in range(row_length))
-        for row_length, deck_index in _PYRAMID_LAYOUT
-    )
+        # (c) Shuffle the token supply once and deal it along the spiral.
+        supply = list(_TOKEN_SUPPLY)
+        rng.shuffle(supply)
+        board: list[Color | None] = [None] * len(SPIRAL)
+        for index, color in zip(SPIRAL, supply, strict=True):
+            board[index] = color
 
-    # (c) Shuffle the token supply once and deal it along the spiral.
-    supply = list(_TOKEN_SUPPLY)
-    rng.shuffle(supply)
-    board: list[Color | None] = [None] * len(SPIRAL)
-    for index, color in zip(SPIRAL, supply, strict=True):
-        board[index] = color
+        # (d) Pick the first player.
+        current_player = rng.randrange(2)
 
-    # (d) Pick the first player.
-    current_player = rng.randrange(2)
+        players = (
+            _fresh_player(0 if current_player == 0 else 1),
+            _fresh_player(0 if current_player == 1 else 1),
+        )
 
-    players = (
-        _fresh_player(0 if current_player == 0 else 1),
-        _fresh_player(0 if current_player == 1 else 1),
-    )
+        return cls(
+            players=players,
+            board=tuple(board),
+            bag=Tokens(),
+            decks=(tuple(decks[0]), tuple(decks[1]), tuple(decks[2])),
+            pyramid=pyramid,
+            royals_available=royals,
+            privileges_supply=_TOTAL_PRIVILEGES - 1,  # second player took one
+            current_player=current_player,
+            winner=None,
+            # First player opens in USE_PRIVILEGES (plan pre-flight ruling,
+            # conflict-1). They hold 0 privileges and the bag is empty, so both
+            # opening steps are no-ops, but the phase matches the plan interface.
+            phase=Phase.USE_PRIVILEGES,
+            pending_buy=None,
+            pending_reserve=None,
+            rng=rng,
+            extra_turn=False,
+            pending_ability=None,
+            pending_royal=False,
+        )
 
-    return GameState(
-        players=players,
-        board=tuple(board),
-        bag=Tokens(),
-        decks=(tuple(decks[0]), tuple(decks[1]), tuple(decks[2])),
-        pyramid=pyramid,
-        royals_available=royals,
-        privileges_supply=_TOTAL_PRIVILEGES - 1,  # second player took one
-        current_player=current_player,
-        winner=None,
-        # First player opens in USE_PRIVILEGES (plan pre-flight ruling,
-        # conflict-1). They hold 0 privileges and the bag is empty, so both
-        # opening steps are no-ops, but the phase matches the plan interface.
-        phase=Phase.USE_PRIVILEGES,
-        pending_buy=None,
-        pending_reserve=None,
-        rng=rng,
-        extra_turn=False,
-        pending_ability=None,
-    )
+    @classmethod
+    def from_seed(cls, seed: int, **fields) -> GameState:
+        """Create a state from arbitrary fields with a seeded RNG (for determinizer)."""
+        return cls(rng=random.Random(seed), **fields)
+
 
 
 def _fresh_player(privileges: int) -> PlayerState:

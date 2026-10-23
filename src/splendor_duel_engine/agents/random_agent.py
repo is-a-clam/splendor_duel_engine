@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import random
 
-from splendor_duel_engine.engine.actions import Action
-from splendor_duel_engine.engine.observation import Observation
+from splendor_duel_engine.engine_api import Action, Observation
 
 
 class RandomAgent:

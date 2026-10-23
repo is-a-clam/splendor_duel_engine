@@ -28,6 +28,45 @@ CROWNS_WIN: int = 10
 COLOR_WIN_POINTS: int = 10
 
 
+def count(tokens: Tokens, color: Color) -> int:
+    """Return the number of tokens of ``color`` in ``tokens``."""
+    return getattr(tokens, color.name.lower())
+
+
+def total(tokens: Tokens) -> int:
+    """Return the total number of tokens in ``tokens``."""
+    return (
+        tokens.white + tokens.blue + tokens.green + tokens.red +
+        tokens.black + tokens.pearl + tokens.gold
+    )
+
+
+def add(t1: Tokens, t2: Tokens) -> Tokens:
+    """Return the sum of two Tokens."""
+    return Tokens(
+        white=t1.white + t2.white,
+        blue=t1.blue + t2.blue,
+        green=t1.green + t2.green,
+        red=t1.red + t2.red,
+        black=t1.black + t2.black,
+        pearl=t1.pearl + t2.pearl,
+        gold=t1.gold + t2.gold,
+    )
+
+
+def sub(t1: Tokens, t2: Tokens) -> Tokens:
+    """Return the difference of two Tokens (t1 - t2)."""
+    return Tokens(
+        white=t1.white - t2.white,
+        blue=t1.blue - t2.blue,
+        green=t1.green - t2.green,
+        red=t1.red - t2.red,
+        black=t1.black - t2.black,
+        pearl=t1.pearl - t2.pearl,
+        gold=t1.gold - t2.gold,
+    )
+
+
 def _remaining_cost(cost: Tokens, bonus: Tokens) -> Tokens:
     """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced).
 
@@ -54,7 +93,7 @@ def cost_deficits(cost: Tokens, bonus: Tokens, paid: Tokens) -> dict[Color, int]
     deficits: dict[Color, int] = {}
     for colour in GEM_COLORS:
         missing = max(
-            0, max(0, cost.count(colour) - bonus.count(colour)) - paid.count(colour)
+            0, max(0, count(cost, colour) - count(bonus, colour)) - count(paid, colour)
         )
         if missing > 0:
             deficits[colour] = missing
@@ -73,7 +112,7 @@ def can_afford_card(card: Card, tokens: Tokens, bonus: Tokens) -> bool:
     This is the single affordability question for "may this player buy this
     card right now".
     """
-    if card.is_multicolor and not any(bonus.count(colour) > 0 for colour in GEM_COLORS):
+    if card.is_multicolor and not any(count(bonus, colour) > 0 for colour in GEM_COLORS):
         return False
     deficits = cost_deficits(card.cost, bonus, tokens)
     shortfall = sum(deficits.values())
@@ -215,7 +254,7 @@ def discard_subsets(tokens: Tokens, excess: int) -> list[Tokens]:
         if idx == len(colors):
             return
         color = colors[idx]
-        held = tokens.count(color)
+        held = count(tokens, color)
         # Greedily cap this colour, but never below what the rest can absorb.
         for take in range(min(held, remaining), -1, -1):
             counts[idx] = take

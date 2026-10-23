@@ -12,11 +12,11 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, new_game
+from splendor_duel_engine.engine.state import GameState
 
 
 def board_state(**kwargs) -> GameState:
-    st = new_game(0)
+    st = GameState.new_game(0)
     return replace(st, **kwargs)
 
 
@@ -214,7 +214,7 @@ def test_reserved_cards_are_in_own_player_state_and_turn_passes():
 def test_multicolor_may_be_reserved_without_owning_bonus():
     """Multicolor cards can be reserved without owning a colored bonus (restriction applies at purchase only)."""
     # L1-24 is a known multicolor card (bonus=joker in card data)
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Find L1-24 in pyramid (level 1 row, index 2)
     card = base_st.pyramid[2][2]  # L1-24
     assert card is not None and card.is_multicolor, "L1-24 should be multicolor"

@@ -7,7 +7,6 @@ from splendor_duel_engine._core import PlayerState as RustPlayerState
 from splendor_duel_engine._core import PurchasedCard as RustPurchasedCard
 from splendor_duel_engine._core import Tokens as RustTokens
 from splendor_duel_engine._core import helpers as rust_helpers
-from splendor_duel_engine._core import is_winner as rust_is_winner
 from splendor_duel_engine._core import load_cards as rust_load_cards
 
 from splendor_duel_engine.engine import helpers as py_helpers
@@ -17,7 +16,7 @@ from splendor_duel_engine.engine.colors import Color as PyColor
 from splendor_duel_engine.engine.colors import Tokens as PyTokens
 from splendor_duel_engine.engine.state import PlayerState as PyPlayerState
 from splendor_duel_engine.engine.state import PurchasedCard as PyPurchasedCard
-from tests.rust.parity import tokens_fingerprint
+from tests.engine_rs.parity import tokens_fingerprint
 
 # The same token vectors are built on both sides: the field names match.
 TOKEN_CASES = [
@@ -221,8 +220,8 @@ def test_discard_subsets_matches() -> None:
 
 def test_can_reserve_matches() -> None:
     boards = [
-        [PyColor.WHITE] * 25,
-        [PyColor.GOLD] + [PyColor.WHITE] * 24,
+        tuple([PyColor.WHITE] * 25),
+        tuple([PyColor.GOLD] + [PyColor.WHITE] * 24),
     ]
     for board in boards:
         rust_board = [getattr(RustColor, colour.name) for colour in board]
@@ -264,7 +263,7 @@ def test_visible_cards_matches() -> None:
 
 
 def test_can_reserve_gold_on_board_is_required() -> None:
-    py_board = [PyColor.WHITE] * 25
+    py_board = tuple([PyColor.WHITE] * 25)
     rust_board = [getattr(RustColor, colour.name) for colour in py_board]
     assert rust_helpers.can_reserve(rust_board, 0) == py_helpers.can_reserve(
         py_board, 0
@@ -286,7 +285,7 @@ def test_is_winner_matches() -> None:
     ]
     expected = [True, False, True, False, True, False, True, False, False]
     for (prestige, crowns, purchased), want in zip(cases, expected, strict=True):
-        rust = rust_is_winner(_rust_player(prestige, crowns, purchased))
+        rust = rust_helpers.is_winner(_rust_player(prestige, crowns, purchased))
         py = py_helpers.is_winner(_py_player(prestige, crowns, purchased))
         assert rust == py, (prestige, crowns, purchased)
         assert rust is want, (prestige, crowns, purchased)

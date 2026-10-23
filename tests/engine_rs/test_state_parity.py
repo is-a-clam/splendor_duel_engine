@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import pytest
 from splendor_duel_engine._core import GameState as RustGameState
-from splendor_duel_engine._core import new_game as rust_new_game
+from splendor_duel_engine._core import GameState as RustGameState
 from splendor_duel_engine._core import observation as rust_observation
 
 from splendor_duel_engine.engine.observation import observation as py_observation
-from splendor_duel_engine.engine.state import new_game as py_new_game
-from tests.rust.parity import observation_fingerprint, state_fingerprint
+from splendor_duel_engine.engine.state import GameState as PyGameState
+from tests.engine_rs.parity import observation_fingerprint, state_fingerprint
 
 SEEDS = [0, 7, 42, 1234, 2**63 - 1]
 
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_field_constructor_round_trip(seed: int) -> None:
-    state = rust_new_game(seed)
+    state = RustGameState.new_game(seed)
     rebuilt = RustGameState(
         players=state.players,
         board=state.board,
@@ -41,6 +41,6 @@ def test_field_constructor_round_trip(seed: int) -> None:
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("player", [0, 1])
 def test_observation_matches(seed: int, player: int) -> None:
-    rust_obs = rust_observation(rust_new_game(seed), player)
-    py_obs = py_observation(py_new_game(seed), player)
+    rust_obs = rust_observation(RustGameState.new_game(seed), player)
+    py_obs = py_observation(PyGameState.new_game(seed), player)
     assert observation_fingerprint(rust_obs) == observation_fingerprint(py_obs)

@@ -150,7 +150,7 @@ def decide(state: GameState) -> DecisionPoint:
 
     if state.phase == Phase.REPLENISH:
         actions: list[Action] = []
-        if state.bag.total() > 0:
+        if helpers.total(state.bag) > 0:
             actions.append(Replenish())
         actions.append(DoneWithReplenish())
         return DecisionPoint(phase=Phase.REPLENISH, legal_actions=tuple(actions))
@@ -176,7 +176,7 @@ def decide(state: GameState) -> DecisionPoint:
 
         # Forced replenish: if no legal take actions and bag non-empty, go to REPLENISH
         # But only if no reserve/buy actions either
-        if not actions and state.bag.total() > 0:
+        if not actions and helpers.total(state.bag) > 0:
             return DecisionPoint(phase=Phase.REPLENISH, legal_actions=(Replenish(),))
 
         actions.sort(
@@ -201,7 +201,7 @@ def decide(state: GameState) -> DecisionPoint:
         if pending_action is None:
             return DecisionPoint(phase=Phase.MULTICOLOR_COLOR, legal_actions=())
         ap = state.players[state.current_player]
-        available_colors = [c for c in GEM_COLORS if ap.bonus.count(c) > 0]
+        available_colors = [c for c in GEM_COLORS if helpers.count(ap.bonus, c) > 0]
         actions: list[Action] = [ChooseMulticolor(color=c) for c in available_colors]
         return DecisionPoint(phase=Phase.MULTICOLOR_COLOR, legal_actions=tuple(actions))
 
@@ -210,7 +210,7 @@ def decide(state: GameState) -> DecisionPoint:
             return DecisionPoint(phase=Phase.STEAL_TOKEN, legal_actions=())
         opp = 1 - state.current_player
         opp_tokens = state.players[opp].tokens
-        stealable_colors = [c for c in GEM_COLORS if opp_tokens.count(c) > 0]
+        stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
         actions: list[Action] = [ChooseStealToken(color=c) for c in stealable_colors]
         return DecisionPoint(phase=Phase.STEAL_TOKEN, legal_actions=tuple(actions))
 
@@ -244,7 +244,7 @@ def decide(state: GameState) -> DecisionPoint:
 
     if state.phase == Phase.DISCARD:
         ap = state.players[state.current_player]
-        excess = ap.tokens.total() - helpers.TOKEN_LIMIT
+        excess = helpers.total(ap.tokens) - helpers.TOKEN_LIMIT
         actions: list[Action] = [
             DiscardTokens(tokens=subset)
             for subset in helpers.discard_subsets(ap.tokens, excess)
@@ -446,7 +446,7 @@ def _apply_use_privilege(state: GameState, index: int) -> GameState:
     # Add token to player's hand
     taken_tokens = Tokens(**{color.value: 1})
     new_ap = dataclasses.replace(
-        ap, tokens=ap.tokens + taken_tokens, privileges=ap.privileges - 1
+        ap, tokens=helpers.add(ap.tokens, taken_tokens), privileges=ap.privileges - 1
     )
 
     # Determine next phase: stay in USE_PRIVILEGES if more privileges, else REPLENISH
@@ -466,7 +466,7 @@ def _apply_replenish(state: GameState) -> GameState:
     # Collect all tokens from bag into a list
     token_colors: list[Color] = []
     for color in Color:
-        count = state.bag.count(color)
+        count = helpers.count(state.bag, color)
         token_colors.extend([color] * count)
 
     # Shuffle the tokens with a *copy* of the state's RNG. ``apply`` must never
@@ -522,7 +522,7 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
         pearl=sum(1 for c in taken_colors if c == Color.PEARL),
         gold=sum(1 for c in taken_colors if c == Color.GOLD),
     )
-    new_ap = dataclasses.replace(ap, tokens=ap.tokens + taken_tokens)
+    new_ap = dataclasses.replace(ap, tokens=helpers.add(ap.tokens, taken_tokens))
     state = state.replace_player(active, new_ap)
 
     if helpers.take_penalty(taken_colors):
@@ -586,7 +586,7 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
 
     # Add gold to player's hand
     gold_tokens = Tokens(gold=1)
-    new_ap = dataclasses.replace(ap, tokens=ap.tokens + gold_tokens)
+    new_ap = dataclasses.replace(ap, tokens=helpers.add(ap.tokens, gold_tokens))
     state = state.replace_player(active, new_ap)
 
     # Extract card from source and update pyramid/decks in one unified logic
@@ -684,14 +684,14 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         raise ValueError("insufficient payment")
     # Also verify payment doesn't exceed player's tokens
     for color in Color:
-        if action.payment.count(color) > ap.tokens.count(color):
+        if helpers.count(action.payment, color) > helpers.count(ap.tokens, color):
             raise ValueError(f"payment exceeds tokens for {color}")
 
     # Move spent tokens to bag (use helper)
     state = state.add_to_bag(action.payment)
 
     # Remove tokens from player
-    new_tokens = ap.tokens - action.payment
+    new_tokens = helpers.sub(ap.tokens, action.payment)
     new_ap = dataclasses.replace(ap, tokens=new_tokens)
 
     # Remove card from source and update pyramid/decks
@@ -793,7 +793,7 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
         case Ability.STEAL_TOKEN:
             opp = 1 - active
             opp_tokens = state.players[opp].tokens
-            stealable_colors = [c for c in GEM_COLORS if opp_tokens.count(c) > 0]
+            stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
             if stealable_colors:
                 return dataclasses.replace(
                     state,
@@ -857,19 +857,19 @@ def _apply_discard_tokens(state: GameState, tokens: Tokens) -> GameState:
     """Move chosen excess tokens from the active player's hand to the bag."""
     active = state.current_player
     ap = state.players[active]
-    excess = ap.tokens.total() - helpers.TOKEN_LIMIT
+    excess = helpers.total(ap.tokens) - helpers.TOKEN_LIMIT
 
     for color in Color:
-        if tokens.count(color) < 0:
+        if helpers.count(tokens, color) < 0:
             raise ValueError("discard counts must be non-negative")
-        if tokens.count(color) > ap.tokens.count(color):
+        if helpers.count(tokens, color) > helpers.count(ap.tokens, color):
             raise ValueError(f"cannot discard more {color} than held")
-    if tokens.total() != excess:
+    if helpers.total(tokens) != excess:
         raise ValueError("discard must remove exactly the excess tokens")
 
     # Tokens go to the bag (spec: excess goes to the bag).
     state = state.add_to_bag(tokens)
-    new_ap = dataclasses.replace(ap, tokens=ap.tokens - tokens)
+    new_ap = dataclasses.replace(ap, tokens=helpers.sub(ap.tokens, tokens))
     state = state.replace_player(active, new_ap)
 
     # The pending seat decision was stashed in ``extra_turn`` by _end_of_turn.
@@ -924,7 +924,7 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
     opp = 1 - active
     opp_tokens = state.players[opp].tokens
 
-    if opp_tokens.count(color) == 0:
+    if helpers.count(opp_tokens, color) == 0:
         raise ValueError(f"opponent has no {color} tokens to steal")
 
     # Remove token from opponent
@@ -1037,7 +1037,7 @@ def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
             case Ability.STEAL_TOKEN:
                 opp = 1 - active
                 opp_tokens = state.players[opp].tokens
-                stealable_colors = [c for c in GEM_COLORS if opp_tokens.count(c) > 0]
+                stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
                 if stealable_colors:
                     return dataclasses.replace(
                         state,
@@ -1081,7 +1081,7 @@ def _end_of_turn(
         state = dataclasses.replace(state, pending_royal=False)
         if state.royals_available:
             return dataclasses.replace(state, phase=Phase.CHOOSE_ROYAL)
-    if state.players[active].tokens.total() > helpers.TOKEN_LIMIT:
+    if helpers.total(state.players[active].tokens) > helpers.TOKEN_LIMIT:
         # Defer the win check until after the player discards. ``extra_turn``
         # carries the pending-seat decision across the DISCARD decision point.
         return dataclasses.replace(

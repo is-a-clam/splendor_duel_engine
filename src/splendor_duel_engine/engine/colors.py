@@ -56,28 +56,22 @@ class Tokens:
 
     def count(self, color: Color) -> int:
         """Return how many tokens of ``color`` are held."""
-        return getattr(self, color.value)
+        from splendor_duel_engine.engine.helpers import count
+        return count(self, color)
 
     def total(self) -> int:
         """Return the total number of tokens held across all colors."""
-        return sum(getattr(self, name) for name in _TOKEN_FIELDS)
+        from splendor_duel_engine.engine.helpers import total
+        return total(self)
 
     def __add__(self, other: Tokens) -> Tokens:
         if not isinstance(other, Tokens):
             return NotImplemented
-        return Tokens(
-            **{
-                name: getattr(self, name) + getattr(other, name)
-                for name in _TOKEN_FIELDS
-            }
-        )
+        from splendor_duel_engine.engine.helpers import add
+        return add(self, other)
 
     def __sub__(self, other: Tokens) -> Tokens:
         if not isinstance(other, Tokens):
             return NotImplemented
-        return Tokens(
-            **{
-                name: getattr(self, name) - getattr(other, name)
-                for name in _TOKEN_FIELDS
-            }
-        )
+        from splendor_duel_engine.engine.helpers import sub
+        return sub(self, other)

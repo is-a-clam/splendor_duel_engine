@@ -1,24 +1,28 @@
 [project]
 name = "splendor-duel-engine"
 version = "0.1.0"
-description = "Add your description here"
+description = "Splendor Duel AI"
 readme = "README.md"
 authors = [
     { name = "Isaac Lam", email = "isaaccylam@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "maturin>=1.15.0",
-]
+dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.1"]
+dev = ["pytest>=8", "ruff>=0.1", "maturin>=1.15,<2.0"]
 
 [tool.ruff]
 # docs/ is prose and planning artifacts (including the plan's fenced Python
 # snippets); the formatter must not rewrite it.
 extend-exclude = ["docs"]
 
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "splendor_duel_engine._core"
+manifest-path = "src/splendor_duel_engine/engine_rs/Cargo.toml"
+python-source = "src"
+
 [build-system]
-requires = ["uv_build>=0.13.1,<0.14.0"]
-build-backend = "uv_build"
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"

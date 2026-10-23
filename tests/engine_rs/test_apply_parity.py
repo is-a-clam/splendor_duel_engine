@@ -10,14 +10,14 @@ from __future__ import annotations
 import pytest
 from splendor_duel_engine._core import apply as rust_apply
 from splendor_duel_engine._core import decide as rust_decide
-from splendor_duel_engine._core import new_game as rust_new_game
+from splendor_duel_engine._core import GameState as RustGameState
 from splendor_duel_engine._core import observation as rust_observation
 
 from splendor_duel_engine.engine.actions import apply as py_apply
 from splendor_duel_engine.engine.actions import decide as py_decide
 from splendor_duel_engine.engine.observation import observation as py_observation
-from splendor_duel_engine.engine.state import new_game as py_new_game
-from tests.rust.parity import (
+from splendor_duel_engine.engine.state import GameState as PyGameState
+from tests.engine_rs.parity import (
     action_fingerprint,
     observation_fingerprint,
     state_fingerprint,
@@ -27,8 +27,8 @@ SEEDS = [0, 1, 7, 42, 1234]
 
 
 def _drive(seed: int, moves: int) -> None:
-    rust_state = rust_new_game(seed)
-    py_state = py_new_game(seed)
+    rust_state = RustGameState.new_game(seed)
+    py_state = PyGameState.new_game(seed)
 
     for move in range(moves):
         # Both engines raise ``ValueError("game is over")`` from ``decide`` once

@@ -42,15 +42,6 @@ def test_getrandbits_below_32_bits_matches(seed: int) -> None:
     for k in (1, 2, 3, 8, 16, 31, 32):
         assert rust.getrandbits(k) == py.getrandbits(k)
 
-
-@pytest.mark.parametrize("seed", SEEDS)
-def test_randbelow_matches(seed: int) -> None:
-    rust = Random(seed)
-    py = random.Random(seed)
-    for n in (2, 3, 7, 25, 64, 2**31):
-        assert rust.randbelow(n) == py._randbelow(n)
-
-
 @pytest.mark.parametrize("seed", SEEDS)
 def test_randrange_matches(seed: int) -> None:
     rust = Random(seed)

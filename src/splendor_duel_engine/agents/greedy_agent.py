@@ -14,28 +14,30 @@ from collections import Counter
 from typing import TYPE_CHECKING, TypeVar
 
 from splendor_duel_engine.agents.base import first_of
-from splendor_duel_engine.engine import helpers
-from splendor_duel_engine.engine.actions import (
+from splendor_duel_engine.engine_api import (
+    GEM_COLORS,
+    Ability,
     Action,
     BuyCard,
     ChooseMulticolor,
     ChooseRoyal,
     ChooseStealToken,
+    Color,
     DiscardTokens,
     DoneWithPrivileges,
     DoneWithReplenish,
+    Observation,
     PayTokens,
     Replenish,
     ReserveCard,
     TakeTokens,
+    Tokens,
     UsePrivilege,
+    helpers,
 )
-from splendor_duel_engine.engine.cards import Ability
-from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
-from splendor_duel_engine.engine.observation import Observation
 
 if TYPE_CHECKING:
-    from splendor_duel_engine.engine.cards import Card
+    from splendor_duel_engine.engine_api import Card
 
 #: Weight of prestige points in card/action value scores.
 _VALUE_WEIGHT = 2
@@ -169,7 +171,8 @@ class GreedyAgent:
 
         # (2) Take tokens when it enables a high-value buy next turn.
         take_actions = [a for a in legal_actions if isinstance(a, TakeTokens)]
-        enabling = [a for a in take_actions if self._enables_high_value_buy(obs, a)]
+        visible = self._visible_cards(obs)
+        enabling = [a for a in take_actions if self._enables_high_value_buy(obs, a, visible)]
         if enabling:
             return self._best_take_action(obs, enabling)
 
@@ -320,11 +323,14 @@ class GreedyAgent:
             key=lambda a: a.card.points * _VALUE_WEIGHT + a.card.crowns,
         )
 
-    def _enables_high_value_buy(self, obs: Observation, action: TakeTokens) -> bool:
+    def _enables_high_value_buy(self, obs: Observation, action: TakeTokens, visible_cards: list[Card]) -> bool:
         """Would taking this line make a >4-point card affordable?
 
         Simulates the resulting hand (current tokens + line tokens) against
         every visible card, per the table's one-step lookahead.
+
+        The `visible_cards` parameter is the pre-computed list of visible cards
+        to avoid re-computing it for each action in the loop.
         """
         hand = obs.you.tokens
         for index in action.line:
@@ -334,7 +340,7 @@ class GreedyAgent:
         return any(
             card.points > _HIGH_VALUE_POINTS
             and helpers.can_afford_card(card, hand, obs.you.bonus)
-            for card in self._visible_cards(obs)
+            for card in visible_cards
         )
 
     def _best_take_action(

@@ -16,7 +16,7 @@ from splendor_duel_engine.engine.actions import (
 from splendor_duel_engine.engine.colors import Color
 from splendor_duel_engine.engine.observation import Observation, observation
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import new_game
+from splendor_duel_engine.engine.state import GameState
 from splendor_duel_engine.mcts.mcts_determinize import determinize
 
 
@@ -60,11 +60,11 @@ def _make_state_with_opponent_reserved():
     """Create a state where opponent (player 1) has face-down reserved cards."""
     # Find a seed where player 0 starts (so we can control the flow better)
     for seed in range(100):
-        state = new_game(seed)
+        state = GameState.new_game(seed)
         if state.current_player == 0:
             break
     else:
-        state = new_game(0)  # fallback
+        state = GameState.new_game(0)  # fallback
 
     # Player 0 starts in USE_PRIVILEGES
     state = _advance_to_mandatory(state)  # Player 0 in MANDATORY
@@ -94,11 +94,11 @@ def _make_state_with_opponent_reserved():
 def _make_state_with_your_reserved_deck():
     """Create a state where current player (player 0) has face-down reserved cards."""
     for seed in range(100):
-        state = new_game(seed)
+        state = GameState.new_game(seed)
         if state.current_player == 0:
             break
     else:
-        state = new_game(0)
+        state = GameState.new_game(0)
 
     # Player 0 starts in USE_PRIVILEGES
     state = _advance_to_mandatory(state)
@@ -128,7 +128,7 @@ def _make_midgame_state_with_purchases():
     """Create a mid-game state where players have purchased cards (so bag is non-empty)."""
     from splendor_duel_engine.engine.actions import BuyCard, decide
 
-    state = new_game(0)
+    state = GameState.new_game(0)
     # Advance to mandatory for player 0
     state = _advance_to_mandatory(state)
 
@@ -195,7 +195,7 @@ def _make_midgame_state_with_purchases():
 
 
 def test_determinize_preserves_public_info():
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, 0)
     rng = random.Random(42)
     det_state = determinize(obs, rng)
@@ -223,7 +223,7 @@ def test_determinize_samples_opponent_reserve_hidden():
 
 
 def test_determinize_samples_deck_order():
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, 0)
     det1 = determinize(obs, random.Random(1))
     det2 = determinize(obs, random.Random(2))
@@ -232,7 +232,7 @@ def test_determinize_samples_deck_order():
 
 
 def test_determinize_copies_the_observation_bag():
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, 0)
     det = determinize(obs, random.Random(42))
     assert det.bag == obs.bag
@@ -272,7 +272,7 @@ def test_determinize_your_reserved_deck_excluded_from_opponent_reserves():
 
 def test_determinize_rng_seeded():
     """Different determinization seeds produce different RNG states."""
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, 0)
     det1 = determinize(obs, random.Random(1))
     det2 = determinize(obs, random.Random(2))
@@ -325,7 +325,7 @@ def test_determinize_invariant_check():
     """
 
     # Test on initial state
-    state = new_game(0)
+    state = GameState.new_game(0)
     obs = observation(state, 0)
     for seed in range(20):
         det = determinize(obs, random.Random(seed))
@@ -354,7 +354,7 @@ def test_determinize_invariant_check():
 
     # Test with random seeds for initial game
     for game_seed in range(10):
-        state = new_game(game_seed)
+        state = GameState.new_game(game_seed)
         # Advance a few random turns
         for _ in range(random.randint(0, 5)):
             if state.phase == Phase.MANDATORY:

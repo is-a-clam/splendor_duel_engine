@@ -5,16 +5,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Protocol, TypeVar, runtime_checkable
 
-from splendor_duel_engine.engine.actions import (
+from splendor_duel_engine.engine_api import (
     Action,
     BuyCard,
+    GameState,
+    Observation,
     ReserveCard,
     TakeTokens,
     apply,
     decide,
+    observation,
 )
-from splendor_duel_engine.engine.observation import Observation, observation
-from splendor_duel_engine.engine.state import GameState, new_game
 
 A = TypeVar("A")
 
@@ -63,7 +64,7 @@ def play_game(
     Raises:
         RuntimeError: If ``max_turns`` is exceeded before the game ends.
     """
-    state = new_game(seed)
+    state = GameState.new_game(seed)
     return play_game_from_state(state, agent0, agent1, max_turns)
 
 
@@ -107,7 +108,7 @@ def play_game_from_state(
         state = apply(state, action)
 
         # Count main actions (turns) — these are the three action types that
-        # advance the game meaningfully. Sub-decisions (payment, privilege use,
+        # advance the game meaningfully. Sub-decision (payment, privilege use,
         # etc.) are not counted as separate turns.
         if isinstance(action, (TakeTokens, BuyCard, ReserveCard)):
             turn_count += 1

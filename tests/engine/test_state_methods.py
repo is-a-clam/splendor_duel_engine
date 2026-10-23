@@ -1,13 +1,13 @@
 """Tests for GameState methods (moved from actions.py helpers)."""
 
 from __future__ import annotations
+from operator import is_
 
 from splendor_duel_engine.engine.cards import Card
 from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.state import (
     GameState,
     PlayerState,
-    new_game,
 )
 
 
@@ -22,6 +22,7 @@ def _sample_card() -> Card:
         bonus=Color.WHITE,
         bonus_count=1,
         ability=None,
+        is_multicolor=False
     )
 
 
@@ -40,7 +41,7 @@ def _sample_player() -> PlayerState:
 
 def _fresh_state() -> GameState:
     """Create a fresh game state for testing."""
-    return new_game(seed=42)
+    return GameState.new_game(seed=42)
 
 
 class TestReplacePlayer:
@@ -149,15 +150,16 @@ class TestTakePyramidCard:
     def test_takes_last_card_when_deck_empty(self):
         # Create state where a deck is exhausted
         state = _fresh_state()
-        deck_idx = 0
+
         # Empty the deck
-        empty_decks = list(state.decks)
-        empty_decks[deck_idx] = ()
+        empty_deck: tuple[Card, ...] = ()
+        empty_decks = (empty_deck, state.decks[1], state.decks[2])
+
         state = state.__class__(
             players=state.players,
             board=state.board,
             bag=state.bag,
-            decks=tuple(empty_decks),
+            decks=empty_decks,
             pyramid=state.pyramid,
             royals_available=state.royals_available,
             privileges_supply=state.privileges_supply,

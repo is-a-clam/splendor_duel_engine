@@ -6,11 +6,11 @@ from dataclasses import replace
 import pytest
 
 from splendor_duel_engine.engine.observation import observation
-from splendor_duel_engine.engine.state import ReservedCard, new_game
+from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 
 def test_own_deck_reserved_visible_to_self_only():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Make player 0 reserve from a deck top
     # Need gold on board and setup for reserve from deck
     # Find a deck card
@@ -34,7 +34,7 @@ def test_own_deck_reserved_visible_to_self_only():
 
 
 def test_pyramid_reserved_is_public():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     # Get a pyramid card
     pyramid_card = base_st.pyramid[2][0]  # a level 1 card from bottom row
     assert pyramid_card is not None
@@ -49,7 +49,7 @@ def test_pyramid_reserved_is_public():
 
 
 def test_deck_reserved_identity_hidden_from_opponent():
-    base_st = new_game(0)
+    base_st = GameState.new_game(0)
     deck_card = base_st.decks[1][-1]
     p1 = replace(
         base_st.players[1], reserved=(ReservedCard(card=deck_card, from_deck=True),)
@@ -61,14 +61,14 @@ def test_deck_reserved_identity_hidden_from_opponent():
 
 
 def test_deck_order_hidden_but_counts_and_bag_visible():
-    st = new_game(0)
+    st = GameState.new_game(0)
     obs = observation(st, 0)
     assert obs.deck_counts == tuple(len(d) for d in st.decks)
     assert obs.bag == st.bag
 
 
 def test_public_info_matches_state():
-    st = new_game(0)
+    st = GameState.new_game(0)
     obs = observation(st, 0)
     assert obs.board == st.board
     assert obs.pyramid == st.pyramid
@@ -79,7 +79,7 @@ def test_public_info_matches_state():
 
 
 def test_observation_is_immutable():
-    st = new_game(0)
+    st = GameState.new_game(0)
     obs = observation(st, 0)
     with pytest.raises(dataclasses.FrozenInstanceError):
         obs.current_player = 5  # type: ignore[misc]  # frozen dataclass: rejected

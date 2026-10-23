@@ -26,12 +26,11 @@ from splendor_duel_engine.engine.state import (
     GameState,
     PlayerState,
     ReservedCard,
-    new_game,
 )
 
 
 def board_state(**kwargs) -> GameState:
-    return replace(new_game(0), **kwargs)
+    return replace(GameState.new_game(0), **kwargs)
 
 
 def _player(**kwargs) -> PlayerState:
