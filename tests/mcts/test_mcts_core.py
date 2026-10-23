@@ -27,7 +27,6 @@ from splendor_duel_engine.mcts.mcts_core import (
     backpropagate,
     expand,
     mcts_search,
-    playout,
     uct_select,
 )
 from splendor_duel_engine.mcts.mcts_determinize import determinize
@@ -127,22 +126,6 @@ def test_expand_creates_valid_child():
     assert node.children[child.action] is child
 
 
-def test_playout_returns_valid_result():
-    state = _advance_to_mandatory(GameState.new_game(0))
-    result = playout(state, random.Random(0), playout_policy="random")
-    assert 0.0 <= result <= 1.0
-
-
-def test_playout_handles_multiple_replenishes():
-    # During playout, if a second replenish occurs, the engine should
-    # resample from the current bag (which includes tokens spent since last replenish)
-    # This test verifies the engine's apply handles this correctly.
-    # For MCTS core, we just verify playout terminates and returns valid value.
-    state = _advance_to_mandatory(GameState.new_game(0))
-    result = playout(state, random.Random(0), playout_policy="random")
-    assert 0.0 <= result <= 1.0
-
-
 def test_backpropagate_updates_path():
     state = _advance_to_mandatory(GameState.new_game(0))
     root = MCTSNode(state=state, parent=None, action=None)
@@ -203,18 +186,6 @@ def test_mcts_search_handles_terminal_state():
         assert "terminal" in str(e).lower()
 
 
-def test_mcts_search_with_greedy_policy():
-    state = _advance_to_mandatory(GameState.new_game(0))
-    obs = observation(state, 0)
-    det_state = determinize(obs, random.Random(0))
-    visits = mcts_search(
-        det_state, random.Random(0), max_playouts=50, playout_policy="greedy"
-    )
-    action = max(visits.items(), key=lambda kv: kv[1])[0]
-    dp = decide(state)
-    assert action in dp.legal_actions
-
-
 def test_mcts_node_is_terminal():
     state = _advance_to_mandatory(GameState.new_game(0))
     node = MCTSNode(state=state, parent=None, action=None)
@@ -272,100 +243,6 @@ def test_expand_auto_expands_forced_moves():
     assert len(child_dp.legal_actions) > 1, (
         f"Expected multiple legal actions at MANDATORY, got {len(child_dp.legal_actions)}"
     )
-
-
-def test_playout_from_near_terminal_state():
-    """Playout from a state one move from game end should terminate quickly with correct winner.
-
-    This test verifies that playout actually continues from the given state
-    (not from a fresh game) and correctly identifies the winner.
-    """
-    from dataclasses import replace as dc_replace
-
-    from splendor_duel_engine.engine.state import Phase
-
-    # Create a near-terminal state: player 0 has 19 prestige and can buy a 1-point card
-    jewels, _royals = load_cards()
-
-    # Find a cheap 1-point card to use as the winning purchase
-    cheap_card = None
-    for card in jewels:
-        if card.points == 1 and card.level == 1:
-            cheap_card = card
-            break
-    assert cheap_card is not None, "Need a level 1, 1-point card for test"
-
-    # Build a minimal state where player 0 is about to win
-    # Player 0 has 19 prestige, the cheap card is in the pyramid, and they can afford it
-    base_state = GameState.new_game(0)
-
-    # Advance to MANDATORY phase
-    state = replace(base_state, phase=Phase.USE_PRIVILEGES)
-    state = apply(state, DoneWithPrivileges())
-    state = apply(state, DoneWithReplenish())
-    assert state.phase == Phase.MANDATORY
-
-    # Place the cheap card in the pyramid at a known position
-    pyramid = [list(row) for row in state.pyramid]
-    # Put the cheap card at pyramid[2][0] (level 1, first slot)
-    pyramid[2][0] = cheap_card
-    new_pyramid = tuple(tuple(row) for row in pyramid)
-
-    # Give player 0 19 prestige and enough tokens to buy the cheap card
-    # Cheap card costs should be affordable - give them the exact tokens needed
-    cost = cheap_card.cost
-    tokens = Tokens(
-        white=cost.white,
-        blue=cost.blue,
-        green=cost.green,
-        red=cost.red,
-        black=cost.black,
-        pearl=cost.pearl,
-        gold=0,
-    )
-    # Bonuses don't matter since we give exact cost
-    player0 = PlayerState(
-        tokens=tokens,
-        bonus=Tokens(),
-        prestige=19,
-        crowns=0,
-        reserved=(),
-        purchased=(),
-        privileges=0,
-    )
-    player1 = PlayerState(
-        tokens=Tokens(),
-        bonus=Tokens(),
-        prestige=0,
-        crowns=0,
-        reserved=(),
-        purchased=(),
-        privileges=0,
-    )
-
-    near_end_state = dc_replace(
-        state,
-        players=(player0, player1),
-        pyramid=new_pyramid,
-        current_player=0,
-        phase=Phase.MANDATORY,
-    )
-
-    # Verify the state is set up correctly
-    dp = decide(near_end_state)
-    buy_actions = [
-        a
-        for a in dp.legal_actions
-        if isinstance(a, BuyCard) and a.card.id == cheap_card.id
-    ]
-    assert buy_actions, f"Cheap card {cheap_card.id} should be buyable"
-
-    # Run playout with greedy policy from this state
-    # Player 0 should win immediately by buying the card
-    result = playout(near_end_state, random.Random(42), playout_policy="greedy")
-
-    # From player 0's perspective (current player), result should be 1.0 (win)
-    assert result == 1.0, f"Expected win (1.0) for current player, got {result}"
 
 
 def test_heuristic_evaluation_returns_valid_range():
@@ -445,70 +322,3 @@ def test_heuristic_evaluation_favors_leading_player():
     assert v0 > 0.7, f"Player 0 should be strongly favored, got {v0}"
     assert v1 < 0.3, f"Player 1 should be disfavored, got {v1}"
     assert v0 > v1
-
-
-def test_playout_respects_max_depth():
-    """Test that playout respects the max_depth parameter."""
-    state = _advance_to_mandatory(GameState.new_game(0))
-
-    # With max_depth=0, should immediately return heuristic evaluation
-    result_depth0 = playout(
-        state, random.Random(0), playout_policy="random", max_depth=0
-    )
-    # Should be the heuristic value (around 0.5 for initial state)
-    assert 0.4 <= result_depth0 <= 0.6
-
-    # With max_depth=1, should make one ply then evaluate
-    result_depth1 = playout(
-        state, random.Random(0), playout_policy="random", max_depth=1
-    )
-    assert 0.0 <= result_depth1 <= 1.0
-
-    # With larger max_depth, should still return valid result
-    result_depth10 = playout(
-        state, random.Random(0), playout_policy="random", max_depth=10
-    )
-    assert 0.0 <= result_depth10 <= 1.0
-
-
-def test_playout_limited_depth_vs_full():
-    """Test that limited-depth playout gives reasonable results compared to full playout.
-
-    Note: We can't easily test "full playout" since the old implementation used
-    play_game_from_state. This test verifies that limited-depth playout produces
-    valid results and terminates quickly.
-    """
-    state = _advance_to_mandatory(GameState.new_game(0))
-
-    # Run several limited-depth playouts
-    results = []
-    for i in range(10):
-        result = playout(state, random.Random(i), playout_policy="random", max_depth=5)
-        results.append(result)
-        assert 0.0 <= result <= 1.0
-
-    # All results should be valid
-    assert len(results) == 10
-
-
-def test_mcts_search_with_max_depth():
-    """Test that mcts_search accepts and uses the max_depth parameter."""
-    state = _advance_to_mandatory(GameState.new_game(0))
-    obs = observation(state, 0)
-    det_state = determinize(obs, random.Random(0))
-
-    # Should work with default max_depth
-    visits1 = mcts_search(det_state, random.Random(0), max_playouts=20)
-    action1 = max(visits1.items(), key=lambda kv: kv[1])[0]
-    dp = decide(state)
-    assert action1 in dp.legal_actions
-
-    # Should work with custom max_depth
-    visits2 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=5)
-    action2 = max(visits2.items(), key=lambda kv: kv[1])[0]
-    assert action2 in dp.legal_actions
-
-    # Should work with max_depth=0 (pure heuristic)
-    visits3 = mcts_search(det_state, random.Random(0), max_playouts=20, max_depth=0)
-    action3 = max(visits3.items(), key=lambda kv: kv[1])[0]
-    assert action3 in dp.legal_actions

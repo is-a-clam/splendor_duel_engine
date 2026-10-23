@@ -20,7 +20,7 @@ use crate::cards::load_cards as rs_load_cards;
 use crate::helpers::{COLOR_WIN_POINTS, CROWNS_WIN, MAX_RESERVED, PRESTIGE_WIN, TOKEN_LIMIT};
 use crate::py::{
     apply, can_afford_card, can_reserve, color_points, cost_deficits, decide,
-    discard_subsets, is_winner, legal_payments, new_game, observation as py_observation,
+    discard_subsets, is_winner, legal_payments, observation as py_observation,
     take_penalty, visible_cards, PyAbility, PyBuyCard, PyCard, PyChooseGold,
     PyChooseMatchingToken, PyChooseMulticolor, PyChooseRoyal, PyChooseStealToken,
     PyColor, PyDecisionPoint, PyDiscardTokens, PyDoneWithPrivileges,

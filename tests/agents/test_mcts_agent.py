@@ -76,7 +76,7 @@ def test_mcts_agent_respects_max_playouts():
 
 
 def test_mcts_agent_random_playout_policy():
-    agent = MCTSAgent(seed=42, max_playouts=100, playout_policy="random")
+    agent = MCTSAgent(seed=42, max_playouts=100)
     state = GameState.new_game(0)
     obs = observation(state, state.current_player)
     dp = decide(state)
@@ -105,15 +105,6 @@ def test_mcts_agent_invalid_max_playouts():
         assert False, "Expected ValueError for max_playouts < 1"
     except ValueError as e:
         assert "max_playouts" in str(e).lower()
-
-
-def test_mcts_agent_invalid_playout_policy():
-    # playout_policy must be 'greedy' or 'random'
-    try:
-        MCTSAgent(seed=0, playout_policy="invalid")
-        assert False, "Expected ValueError for invalid playout_policy"
-    except ValueError as e:
-        assert "playout_policy" in str(e).lower()
 
 
 def test_mcts_agent_invalid_num_determinizations():

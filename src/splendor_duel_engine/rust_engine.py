@@ -42,6 +42,7 @@ from splendor_duel_engine._core import (
     decide,
     load_cards,
     observation,
+    helpers,
 )
 
 #: The Rust ``Action`` is an enum, not a ``#[pyclass]``: ``_core`` does not
@@ -99,4 +100,5 @@ __all__ = [
     "decide",
     "load_cards",
     "observation",
+    "helpers",
 ]

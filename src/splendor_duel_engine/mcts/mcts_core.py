@@ -223,61 +223,6 @@ def _heuristic_evaluation(state: GameState, perspective: int) -> float:
     return max(0.0, min(1.0, 0.5 + score / 80.0))
 
 
-def playout(
-    state: GameState,
-    rng: random.Random,
-    playout_policy: str = "greedy",
-    max_depth: int = 15,
-) -> float:
-    """
-    Simulate from current state with limited-depth playout.
-
-    - state.rng is pre-seeded from determinization (for tree determinism)
-    - engine.apply deep-copies state.rng before any random draw
-    - First replenish: uses the pre-seeded RNG (deterministic per root)
-    - Subsequent random draws: use the advanced RNG from previous draws
-    - playout_policy agents are seeded from MCTS RNG for decision randomness
-    - Playouts stop at max_depth plies and return heuristic evaluation
-
-    Args:
-        state: Starting game state (must be determinized).
-        rng: Random number generator (used to derive agent seeds).
-        playout_policy: "greedy" or "random" (default "greedy").
-        max_depth: Maximum number of plies to simulate before heuristic evaluation (default 15).
-
-    Returns:
-        1.0 if current player wins, 0.5 for draw, 0.0 if current player loses.
-    """
-    current_player = state.current_player
-
-    # Derive distinct agent seeds from the MCTS RNG to avoid correlation
-    # in symmetric positions. XOR with 0xFFFFFFFF ensures different sequences.
-    agent_seed_0 = rng.randint(0, 2**31 - 1)
-    agent_seed_1 = rng.randint(0, 2**31 - 1) ^ 0xFFFFFFFF
-
-    policy_factory = PLAYOUT_POLICIES[playout_policy]
-    agent0 = policy_factory(agent_seed_0)
-    agent1 = policy_factory(agent_seed_1)
-
-    current_state = state
-    depth = 0
-
-    while current_state.winner is None and depth < max_depth:
-        player = current_state.current_player
-        obs = observation(current_state, player)
-        dp = decide(current_state)
-        agent = agent0 if player == 0 else agent1
-        action = agent.choose_action(obs, dp.legal_actions)
-        current_state = apply(current_state, action)
-        depth += 1
-
-    if current_state.winner is not None:
-        return 1.0 if current_state.winner == current_player else 0.0
-
-    # Heuristic evaluation from current_state perspective
-    return _heuristic_evaluation(current_state, current_player)
-
-
 def backpropagate(node: MCTSNode, result: float):
     """Backpropagate the playout result up to the root.
 
@@ -301,8 +246,6 @@ def mcts_search(
     rng: random.Random,
     max_playouts: int,
     exploration: float = 1.414,
-    playout_policy: str = "greedy",
-    max_depth: int = 15,
 ) -> dict[Action, int]:
     """Run MCTS search and return visit counts for each legal action.
 
@@ -345,7 +288,8 @@ def mcts_search(
                 result = 1.0 if node.state.winner == current_player else 0.0
                 backpropagate(node, result)
             else:
-                result = playout(node.state, rng, playout_policy, max_depth)
+                current_player = root_state.current_player
+                result = _heuristic_evaluation(node.state, current_player)
                 backpropagate(node, result)
         else:
             # This branch should be unreachable: uct_select guarantees we only

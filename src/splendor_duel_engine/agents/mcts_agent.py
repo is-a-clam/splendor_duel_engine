@@ -24,9 +24,7 @@ class MCTSAgent:
         seed: int | None = None,
         max_playouts: int = 2000,
         exploration: float = 1.414,
-        playout_policy: str = "greedy",
         num_determinizations: int = 20,
-        max_depth: int = 15,
     ) -> None:
         """Create an MCTS agent.
 
@@ -43,20 +41,12 @@ class MCTSAgent:
         """
         if max_playouts < 1:
             raise ValueError("max_playouts must be >= 1")
-        if playout_policy not in ("greedy", "random"):
-            raise ValueError(
-                f"playout_policy must be 'greedy' or 'random', got {playout_policy}"
-            )
         if num_determinizations < 1:
             raise ValueError("num_determinizations must be >= 1")
-        if max_depth < 0:
-            raise ValueError("max_depth must be >= 0")
         self._rng = random.Random(seed)
         self._max_playouts = max_playouts
         self._exploration = exploration
-        self._playout_policy = playout_policy
         self._num_determinizations = num_determinizations
-        self._max_depth = max_depth
 
     def choose_action(
         self, observation: Observation, legal_actions: tuple[Action, ...]
@@ -88,8 +78,6 @@ class MCTSAgent:
                 rng=self._rng,
                 max_playouts=playouts_per_det,
                 exploration=self._exploration,
-                playout_policy=self._playout_policy,
-                max_depth=self._max_depth,
             )
             # Aggregate visit counts
             for action, count in visits.items():

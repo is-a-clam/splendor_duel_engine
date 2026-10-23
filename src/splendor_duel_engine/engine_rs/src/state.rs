@@ -90,13 +90,6 @@ pub struct ReserveCard {
 /// starts with one, leaving the rest in the supply.
 const TOTAL_PRIVILEGES: u32 = 3;
 
-/// Total tokens of each gem colour in the game (spec §Components and setup).
-const GEM_TOTAL: u8 = 4;
-/// Total pearl tokens in the game (spec §Components and setup).
-const PEARL_TOTAL: u8 = 2;
-/// Total gold tokens in the game (spec §Components and setup).
-const GOLD_TOTAL: u8 = 3;
-
 /// The 25-token supply in the order it is shuffled at setup (spec: 4 each of
 /// the five gems, 2 pearls, 3 gold). Pinned so the deal is reproducible.
 const TOKEN_SUPPLY: [Color; 25] = [
