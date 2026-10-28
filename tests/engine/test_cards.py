@@ -13,6 +13,7 @@ import pytest
 
 from splendor_duel_engine.engine.cards import CARDS_PATH, Ability, load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.helpers import get_tokens, sub_tokens, total_tokens
 
 
 def test_deck_composition():
@@ -79,13 +80,13 @@ def test_load_cards_rejects_unknown_cost_key(tmp_path):
 
 def test_tokens_are_hashable_and_arithmetic():
     assert hash(Tokens(white=2, pearl=1)) is not None
-    assert (Tokens(white=3) - Tokens(white=1)).white == 2
-    assert Tokens(white=1).total() == 1
+    assert sub_tokens(Tokens(white=3), Tokens(white=1)).white == 2
+    assert total_tokens(Tokens(white=1)) == 1
 
 
 def test_tokens_count_by_color():
     assert GEM_COLORS == (Color.WHITE, Color.BLUE, Color.GREEN, Color.RED, Color.BLACK)
     tokens = Tokens(white=2, black=1)
-    assert tokens.count(Color.WHITE) == 2
-    assert tokens.count(Color.BLACK) == 1
-    assert tokens.count(Color.GOLD) == 0
+    assert get_tokens(tokens, Color.WHITE) == 2
+    assert get_tokens(tokens, Color.BLACK) == 1
+    assert get_tokens(tokens, Color.GOLD) == 0

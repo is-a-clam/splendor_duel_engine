@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.board import SPIRAL
-
-
-from splendor_duel_engine.engine.cards import Ability, Card
-from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.cards import Ability
+from splendor_duel_engine.engine.colors import ALL_COLORS, GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, PurchasedCard, ReservedCard
+from splendor_duel_engine.engine.state import ReservedCard, PurchasedCard
+
+if TYPE_CHECKING:
+    from splendor_duel_engine.engine.cards import Card
+    from splendor_duel_engine.engine.state import GameState
 
 
 _BOARD_SIZE = 25
@@ -463,7 +466,7 @@ def _apply_replenish(state: GameState) -> GameState:
 
     # Collect all tokens from bag into a list
     token_colors: list[Color] = []
-    for color in Color:
+    for color in ALL_COLORS:
         count = helpers.get_tokens(state.bag, color)
         token_colors.extend([color] * count)
 
@@ -681,7 +684,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     if not helpers.can_afford_card(card, bonus, action.payment):
         raise ValueError("insufficient payment")
     # Also verify payment doesn't exceed player's tokens
-    for color in Color:
+    for color in ALL_COLORS:
         if helpers.get_tokens(action.payment, color) > helpers.get_tokens(ap.tokens, color):
             raise ValueError(f"payment exceeds tokens for {color}")
 
@@ -858,7 +861,7 @@ def _apply_discard_tokens(state: GameState, tokens: Tokens) -> GameState:
     ap = state.players[active]
     excess = helpers.total_tokens(ap.tokens) - helpers.TOKEN_LIMIT
 
-    for color in Color:
+    for color in ALL_COLORS:
         if helpers.get_tokens(tokens, color) < 0:
             raise ValueError("discard counts must be non-negative")
         if helpers.get_tokens(tokens, color) > helpers.get_tokens(ap.tokens, color):

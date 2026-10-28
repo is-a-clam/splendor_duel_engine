@@ -21,25 +21,6 @@ from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, ReservedCard
 
 
-def _setup_buy_state(base_st: GameState, player: int = 0) -> tuple[GameState, object]:
-    """Helper: set up a state where player can buy a card, returns state after BuyCard, before PayTokens."""
-    # Give player lots of gold and a colored bonus
-    st = replace(
-        base_st,
-        current_player=player,
-        phase=Phase.MANDATORY,
-        players=(
-            replace(
-                base_st.players[player],
-                bonus=Tokens(white=1),
-                tokens=Tokens(gold=10),
-            ),
-            base_st.players[1 - player],
-        ),
-    )
-    return st, player
-
-
 def _complete_buy(st: GameState, card) -> GameState:
     """Execute BuyCard then PayTokens for the given card."""
     dp = decide(st)

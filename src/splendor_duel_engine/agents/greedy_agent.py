@@ -14,6 +14,7 @@ from collections import Counter
 from typing import TYPE_CHECKING, TypeVar
 
 from splendor_duel_engine.agents.base import first_of
+from splendor_duel_engine.engine.colors import ALL_COLORS
 from splendor_duel_engine.engine_api import (
     GEM_COLORS,
     Ability,
@@ -293,7 +294,7 @@ class GreedyAgent:
         )
 
         deficits = helpers.cost_deficits(best.cost, obs.you.bonus, obs.you.tokens)
-        nets = sorted((-count, color) for color in Color if (count := helpers.get_tokens(deficits, color) > 0))
+        nets = sorted((-count, color) for color in ALL_COLORS if (count := helpers.get_tokens(deficits, color) > 0))
         needed: list[Color] = []
         for neg_count, color in nets:
             needed.extend([color] * -neg_count)

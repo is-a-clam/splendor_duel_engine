@@ -25,45 +25,6 @@ CROWNS_WIN: int = 10
 COLOR_WIN_POINTS: int = 10
 
 
-def get_tokens(tokens: Tokens, color: Color) -> int:
-    """Return the number of tokens of ``color`` in ``tokens``."""
-    return getattr(tokens, color.value.lower())
-
-
-def total_tokens(tokens: Tokens) -> int:
-    """Return the total number of tokens in ``tokens``."""
-    return (
-        tokens.white + tokens.blue + tokens.green + tokens.red +
-        tokens.black + tokens.pearl + tokens.gold
-    )
-
-
-def add_tokens(t1: Tokens, t2: Tokens) -> Tokens:
-    """Return the sum of two Tokens."""
-    return Tokens(
-        white=t1.white + t2.white,
-        blue=t1.blue + t2.blue,
-        green=t1.green + t2.green,
-        red=t1.red + t2.red,
-        black=t1.black + t2.black,
-        pearl=t1.pearl + t2.pearl,
-        gold=t1.gold + t2.gold,
-    )
-
-
-def sub_tokens(t1: Tokens, t2: Tokens) -> Tokens:
-    """Return the difference of two Tokens (t1 - t2)."""
-    return Tokens(
-        white=t1.white - t2.white,
-        blue=t1.blue - t2.blue,
-        green=t1.green - t2.green,
-        red=t1.red - t2.red,
-        black=t1.black - t2.black,
-        pearl=t1.pearl - t2.pearl,
-        gold=t1.gold - t2.gold,
-    )
-
-
 def _remaining_cost(cost: Tokens, bonus: Tokens) -> Tokens:
     """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced)."""
     return Tokens(

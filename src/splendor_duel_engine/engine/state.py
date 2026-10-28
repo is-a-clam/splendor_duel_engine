@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from splendor_duel_engine.engine.board import SPIRAL
 from splendor_duel_engine.engine.cards import load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
-from splendor_duel_engine.engine.helpers import add_tokens
 from splendor_duel_engine.engine.phase import Phase
 
 if TYPE_CHECKING:
@@ -125,7 +124,7 @@ class GameState:
 
     def add_to_bag(self, tokens: Tokens) -> GameState:
         """Add tokens to bag."""
-        new_bag = add_tokens(self.bag, tokens)
+        new_bag = self.bag + tokens
         return replace(self, bag=new_bag)
 
     def pop_deck(self, deck_idx: int) -> tuple[Card, GameState]:
