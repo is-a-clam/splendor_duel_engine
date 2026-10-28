@@ -7,13 +7,20 @@ over state *fragments* so a caller can ask about a hypothetical hand.
 
 from __future__ import annotations
 
-from itertools import product, combinations
+from itertools import product
 from typing import TYPE_CHECKING
 
-from splendor_duel_engine.engine.colors import GEM_COLORS, PAY_COLORS, ALL_COLORS, Tokens, Color
+from splendor_duel_engine.engine.colors import (
+    ALL_COLORS,
+    GEM_COLORS,
+    PAY_COLORS,
+    Color,
+    Tokens,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
     from splendor_duel_engine.engine.cards import Card
     from splendor_duel_engine.engine.state import PlayerState, PurchasedCard
 
@@ -51,10 +58,10 @@ def can_afford_card(card: Card, bonus: Tokens, tokens: Tokens) -> bool:
     A multicolor card may not be bought unless the player holds a bonus token
     in some gem color.
     """
-    if card.is_multicolor and not any(get_tokens(bonus, color) > 0 for color in GEM_COLORS):
+    if card.is_multicolor and not any(bonus.get(color) > 0 for color in GEM_COLORS):
         return False
     deficits = cost_deficits(card.cost, bonus, tokens)
-    shortfall = total_tokens(deficits)
+    shortfall = deficits.total()
     return shortfall <= tokens.gold
 
 
@@ -68,29 +75,35 @@ def legal_payments(card: Card, bonus: Tokens, tokens: Tokens) -> list[Tokens]:
     """
     remaining = _remaining_cost(card.cost, bonus)
     deficits = _remaining_cost(remaining, tokens)
-    total_gold_required = total_tokens(deficits)
+    total_gold_required = deficits.total()
 
     if total_gold_required > tokens.gold:
         return []
 
     gold_ranges: list[range] = []
     for color in PAY_COLORS:
-        required_gold = get_tokens(deficits, color)
+        required_gold = deficits.get(color)
         extra_gold = tokens.gold - total_gold_required
-        color_cost = get_tokens(remaining, color)
-        gold_range = range(required_gold, min(required_gold + extra_gold, color_cost) + 1)
+        color_cost = remaining.get(color)
+        gold_range = range(
+            required_gold, min(required_gold + extra_gold, color_cost) + 1
+        )
         gold_ranges.append(gold_range)
 
     return [
-        Tokens(**({
-            color.value: get_tokens(remaining, color) - substitution
-            for color, substitution, in zip(PAY_COLORS, substitutions)
-        } | {
-            color.GOLD.value: sum(substitutions)
-        }))
+        Tokens(
+            **(
+                {
+                    color.value: remaining.get(color) - substitution
+                    for color, substitution in zip(PAY_COLORS, substitutions)
+                }
+                | {Color.GOLD.value: sum(substitutions)}
+            )
+        )
         for substitutions in product(*gold_ranges)
         if sum(substitutions) <= tokens.gold
     ]
+
 
 def is_penalty_triggered(colors: Iterable[Color]) -> bool:
     """Return True if taking these colors triggers a penalty.
@@ -127,11 +140,12 @@ def color_points(purchased: Iterable[PurchasedCard], color: Color) -> int:
 
 def discard_subsets(tokens: Tokens, excess: int) -> list[Tokens]:
     """Enumerate distinct discard subsets of ``tokens`` summing to ``excess``."""
-    token_list: list[Color] = []
-    for color in ALL_COLORS:
-        token_list.extend([color] * get_tokens(tokens, color))
-    subsets = combinations(token_list, excess)
-    return [Tokens(**{token.value: subset.count(token) for token in set(subset)}) for subset in subsets]
+    discard_ranges = [range(min(tokens.get(color), excess) + 1) for color in ALL_COLORS]
+    return [
+        Tokens(**{color.value: n for color, n in zip(ALL_COLORS, discard_counts)})
+        for discard_counts in product(*discard_ranges)
+        if sum(discard_counts) == excess
+    ]
 
 
 def can_reserve(board: tuple[Color | None, ...], reserved_count: int) -> bool:

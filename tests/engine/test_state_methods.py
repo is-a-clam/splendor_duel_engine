@@ -1,7 +1,6 @@
 """Tests for GameState methods (moved from actions.py helpers)."""
 
 from __future__ import annotations
-from operator import is_
 
 from splendor_duel_engine.engine.cards import Card
 from splendor_duel_engine.engine.colors import Color, Tokens
@@ -22,7 +21,7 @@ def _sample_card() -> Card:
         bonus=Color.WHITE,
         bonus_count=1,
         ability=None,
-        is_multicolor=False
+        is_multicolor=False,
     )
 
 

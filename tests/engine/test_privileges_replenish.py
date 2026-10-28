@@ -48,7 +48,7 @@ def test_use_privilege_takes_one_chosen_non_gold_board_token():
     chosen_action = next(a for a in take_actions if a.index == non_gold_idx)
     st2 = apply(st, chosen_action)
     assert st2.players[0].privileges == 0
-    assert st2.players[0].tokens.count(token_color) == 1
+    assert st2.players[0].tokens.get(token_color) == 1
     assert st2.board[non_gold_idx] is None
     # Should advance to REPLENISH phase
     assert st2.phase is Phase.REPLENISH

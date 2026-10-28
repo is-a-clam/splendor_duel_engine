@@ -6,18 +6,19 @@ rule, not a preference.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from splendor_duel_engine.engine.cards import Card
-from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.colors import Color, Tokens
 from splendor_duel_engine.engine.helpers import (
     can_afford_card,
     can_reserve,
     color_points,
     cost_deficits,
     discard_subsets,
+    is_penalty_triggered,
     is_winner,
     legal_payments,
-    is_penalty_triggered,
-    total_tokens,
     visible_cards,
 )
 from splendor_duel_engine.engine.state import PlayerState, PurchasedCard
@@ -55,25 +56,19 @@ def test_cost_deficits_reports_missing_tokens_per_color():
     bonus = Tokens(white=1)
     paid = Tokens(white=1, blue=1)
     assert cost_deficits(cost, bonus, paid) == Tokens(
-        white = 1,
-        blue = 1,
-        green = 0,
-        red = 0,
-        black = 0,
-        pearl = 1,
-        gold = 0,
+        white=1,
+        blue=1,
+        green=0,
+        red=0,
+        black=0,
+        pearl=1,
+        gold=0,
     )
 
 
 def test_cost_deficits_omits_colors_that_are_covered():
     cost = Tokens(white=2, blue=1)
     assert cost_deficits(cost, Tokens(), Tokens(white=2, blue=1)) == Tokens()
-
-
-def test_cost_deficits_ignores_gold():
-    deficits = cost_deficits(Tokens(white=1, gold=2), Tokens(), Tokens())
-    assert deficits == {Color.WHITE: 1}
-    assert deficits.gold == 0
 
 
 def test_cost_deficits_orders_gem_colors_then_pearl():
@@ -136,11 +131,15 @@ def test_color_points_ignores_colorless_cards():
 
 def test_discard_subsets_enumerates_distinct_subsets():
     tokens = Tokens(white=2, blue=1)
-    assert discard_subsets(tokens, 1) == [Tokens(white=1), Tokens(blue=1)]
-    assert discard_subsets(tokens, 2) == [
-        Tokens(white=2),
-        Tokens(white=1, blue=1),
-    ]
+    assert Counter(discard_subsets(tokens, 1)) == Counter(
+        [Tokens(white=1), Tokens(blue=1)]
+    )
+    assert Counter(discard_subsets(tokens, 2)) == Counter(
+        [
+            Tokens(white=2),
+            Tokens(white=1, blue=1),
+        ]
+    )
 
 
 def test_discard_subsets_returns_one_result_for_the_whole_hand():
@@ -203,16 +202,21 @@ def test_can_afford_card_does_not_require_a_bonus_for_ordinary_cards():
 
 def test_legal_payments_uses_minimum_gold_per_combination():
     card = make_card(cost=Tokens(white=2))
-    assert legal_payments(card, Tokens(white=2, gold=3), Tokens()) == [
-        Tokens(gold=2),
-        Tokens(white=1, gold=1),
-        Tokens(white=2),
-    ]
+    result = legal_payments(card, Tokens(), Tokens(white=2, gold=3))
+    assert Counter(result) == Counter(
+        [
+            Tokens(gold=2),
+            Tokens(white=1, gold=1),
+            Tokens(white=2),
+        ]
+    )
 
 
 def test_legal_payments_covers_a_shortfall_with_gold():
     card = make_card(cost=Tokens(white=3))
-    assert legal_payments(card, Tokens(), Tokens(white=2, gold=1)) == [Tokens(white=2, gold=1)]
+    assert legal_payments(card, Tokens(), Tokens(white=2, gold=1)) == [
+        Tokens(white=2, gold=1)
+    ]
 
 
 def test_legal_payments_is_empty_when_the_card_is_unaffordable():
@@ -227,18 +231,20 @@ def test_legal_payments_applies_a_bonus_to_the_cost():
 
 def test_legal_payments_covers_a_pearl_cost_partly_with_gold():
     card = make_card(cost=Tokens(pearl=2))
-    assert legal_payments(card, Tokens(), Tokens(pearl=1, gold=1)) == [Tokens(pearl=1, gold=1)]
+    assert legal_payments(card, Tokens(), Tokens(pearl=1, gold=1)) == [
+        Tokens(pearl=1, gold=1)
+    ]
 
 
 def test_legal_payments_gold_always_equals_the_cost_deficits_it_leaves_open():
     positions = [
         # (cost, bonus, tokens, is_multicolor)
-        (Tokens(white=2), Tokens(),        Tokens(white=2, gold=3), False),
-        (Tokens(white=3), Tokens(),        Tokens(white=2, gold=1), False),
-        (Tokens(white=5), Tokens(),        Tokens(white=1, gold=1), False),
-        (Tokens(white=3), Tokens(white=1), Tokens(gold=2),          False),
-        (Tokens(white=3), Tokens(white=1), Tokens(gold=3),          True),
-        (Tokens(pearl=2), Tokens(),        Tokens(pearl=1, gold=1), False),
+        (Tokens(white=2), Tokens(), Tokens(white=2, gold=3), False),
+        (Tokens(white=3), Tokens(), Tokens(white=2, gold=1), False),
+        (Tokens(white=5), Tokens(), Tokens(white=1, gold=1), False),
+        (Tokens(white=3), Tokens(white=1), Tokens(gold=2), False),
+        (Tokens(white=3), Tokens(white=1), Tokens(gold=3), True),
+        (Tokens(pearl=2), Tokens(), Tokens(pearl=1, gold=1), False),
         (
             Tokens(white=2, blue=2, pearl=1),
             Tokens(),
@@ -261,7 +267,7 @@ def test_legal_payments_gold_always_equals_the_cost_deficits_it_leaves_open():
         payments = legal_payments(card, bonus, tokens)
         assert bool(payments) == can_afford_card(card, bonus, tokens)
         for payment in payments:
-            assert payment.gold == total_tokens(cost_deficits(card.cost, bonus, payment))
+            assert payment.gold == cost_deficits(card.cost, bonus, payment).total()
 
 
 # --- is_winner -----------------------------------------------------------

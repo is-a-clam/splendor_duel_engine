@@ -18,8 +18,8 @@ from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
 
 if TYPE_CHECKING:
-    from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard
     from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
+    from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard
 
 
 TOTAL_PRIVILEGES: int = 3
@@ -134,7 +134,9 @@ class GameState:
         new_decks = tuple(tuple(d) for d in decks)
         return card, replace(self, decks=new_decks)
 
-    def take_pyramid_card(self, row_idx: int, col_idx: int) -> tuple[Card | None, GameState]:
+    def take_pyramid_card(
+        self, row_idx: int, col_idx: int
+    ) -> tuple[Card | None, GameState]:
         """Take card from pyramid slot and refill from corresponding deck in one atomic operation.
 
         Returns (card, new_state). If the corresponding deck is empty, the slot stays empty.
@@ -169,17 +171,20 @@ class GameState:
             )
         elif self.players[other].privileges > 0:
             players[other] = replace(
-                players[other],
-                privileges=players[other].privileges - 1
+                players[other], privileges=players[other].privileges - 1
             )
             players[recipient] = replace(
                 players[recipient],
                 privileges=players[recipient].privileges + 1,
             )
-        
+
         new_players = (players[0], players[1])
 
-        return replace(self, players=new_players, privileges_supply=supply,)
+        return replace(
+            self,
+            players=new_players,
+            privileges_supply=supply,
+        )
 
     # ===== Factory class methods =====
 
@@ -241,7 +246,6 @@ class GameState:
     def from_seed(cls, seed: int, **fields) -> GameState:
         """Create a state from arbitrary fields with a seeded RNG (for determinizer)."""
         return cls(rng=random.Random(seed), **fields)
-
 
 
 def _fresh_player(privileges: int) -> PlayerState:

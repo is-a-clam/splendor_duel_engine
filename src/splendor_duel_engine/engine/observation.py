@@ -12,10 +12,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
-    from splendor_duel_engine.engine.cards import Card, RoyalCard
+    from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard
     from splendor_duel_engine.engine.colors import Color, Tokens
     from splendor_duel_engine.engine.phase import Phase
-    from splendor_duel_engine.engine.cards import Ability
     from splendor_duel_engine.engine.state import GameState, PurchasedCard
 
 
