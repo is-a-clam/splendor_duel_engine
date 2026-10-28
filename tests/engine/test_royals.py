@@ -293,8 +293,8 @@ def test_no_royal_available_skips_choice():
 def test_multicolor_purchase_crossing_crown_threshold_grants_royal():
     """Buying a multicolor card that crosses a crown threshold still offers a royal.
 
-    The colour choice comes first (MULTICOLOR_COLOR), but the royal pick must not
-    be dropped: after the colour resolves the engine enters CHOOSE_ROYAL, and
+    The color choice comes first (MULTICOLOR_COLOR), but the royal pick must not
+    be dropped: after the color resolves the engine enters CHOOSE_ROYAL, and
     choosing a royal grants its prestige.
     """
     base_st = GameState.new_game(0)
@@ -334,7 +334,7 @@ def test_multicolor_purchase_crossing_crown_threshold_grants_royal():
     pay_actions = [a for a in decide(st2).legal_actions if isinstance(a, PayTokens)]
     st3 = apply(st2, pay_actions[0])
 
-    # The colour must be chosen before the royal, and the trigger is retained.
+    # The color must be chosen before the royal, and the trigger is retained.
     assert st3.phase is Phase.MULTICOLOR_COLOR
     assert st3.pending_royal is True
     assert st3.players[0].crowns == 2 + card.crowns

@@ -87,22 +87,22 @@ def test_cost_deficits_matches() -> None:
         py = py_helpers.cost_deficits(
             PyTokens(**cost), PyTokens(**bonus), PyTokens(**paid)
         )
-        assert {colour.value: n for colour, n in rust.items()} == {
-            colour.value: n for colour, n in py.items()
+        assert {color.value: n for color, n in rust.items()} == {
+            color.value: n for color, n in py.items()
         }
         assert list(rust) == [getattr(RustColor, name) for name in _order(py)]
 
 
 def _order(py_deficits) -> list[str]:
-    """The colour names in the Python helper's insertion order."""
-    return [colour.name for colour in py_deficits]
+    """The color names in the Python helper's insertion order."""
+    return [color.name for color in py_deficits]
 
 
 def test_cost_deficits_ignores_gold() -> None:
     rust = rust_helpers.cost_deficits(
         RustTokens(white=1, gold=2), RustTokens(), RustTokens()
     )
-    assert {colour.value: n for colour, n in rust.items()} == {"white": 1}
+    assert {color.value: n for color, n in rust.items()} == {"white": 1}
 
 
 def test_can_afford_card_matches() -> None:
@@ -112,25 +112,25 @@ def test_can_afford_card_matches() -> None:
         ("L1-15", {"white": 2, "gold": 1}, {}),
         ("L1-29", {"red": 4, "pearl": 1}, {}),
         ("L1-29", {"red": 4, "gold": 1}, {}),
-        # Multicolor: no gem-colour bonus means unaffordable, however much gold.
+        # Multicolor: no gem-color bonus means unaffordable, however much gold.
         ("L1-18", {"gold": 10}, {}),
-        # ... but a single gem bonus in any colour unlocks it.
+        # ... but a single gem bonus in any color unlocks it.
         ("L1-18", {"white": 3, "pearl": 1}, {"white": 1}),
         ("L1-18", {"gold": 10}, {"white": 1}),
         ("L1-18", {"gold": 10}, {"black": 1}),
-        # Pearls and gold are not gem-colour bonuses.
+        # Pearls and gold are not gem-color bonuses.
         ("L1-18", {"gold": 10}, {"pearl": 1}),
         ("L1-18", {"gold": 10}, {"gold": 1}),
-        # Bonus tokens reduce the coloured requirement.
+        # Bonus tokens reduce the colored requirement.
         ("L2-17", {"white": 3, "blue": 2, "pearl": 1}, {"white": 1}),
         ("L2-17", {"white": 2, "blue": 2, "pearl": 1}, {"white": 1}),
     ]
     for card_id, tokens, bonus in cases:
         rust = rust_helpers.can_afford_card(
-            RUST_BY_ID[card_id], RustTokens(**tokens), RustTokens(**bonus)
+            RUST_BY_ID[card_id], RustTokens(**bonus), RustTokens(**tokens)
         )
         py = py_helpers.can_afford_card(
-            PY_BY_ID[card_id], PyTokens(**tokens), PyTokens(**bonus)
+            PY_BY_ID[card_id], PyTokens(**bonus), PyTokens(**tokens)
         )
         assert rust == py, (card_id, tokens, bonus)
 
@@ -147,10 +147,10 @@ def test_legal_payments_matches() -> None:
     ]
     for card_id, tokens, bonus in cases:
         rust = rust_helpers.legal_payments(
-            RUST_BY_ID[card_id], RustTokens(**tokens), RustTokens(**bonus)
+            RUST_BY_ID[card_id], RustTokens(**bonus), RustTokens(**tokens)
         )
         py = py_helpers.legal_payments(
-            PY_BY_ID[card_id], PyTokens(**tokens), PyTokens(**bonus)
+            PY_BY_ID[card_id], PyTokens(**bonus), PyTokens(**tokens)
         )
         assert [tokens_fingerprint(t) for t in rust] == [
             tokens_fingerprint(t) for t in py
@@ -167,8 +167,8 @@ def test_take_penalty_matches() -> None:
         [],
     ]
     for case in cases:
-        rust_case = [getattr(RustColor, colour.name) for colour in case]
-        assert rust_helpers.take_penalty(rust_case) == py_helpers.take_penalty(case)
+        rust_case = [getattr(RustColor, color.name) for color in case]
+        assert rust_helpers.take_penalty(rust_case) == py_helpers.is_penalty_triggered(case)
 
 
 def test_color_points_matches() -> None:
@@ -183,10 +183,10 @@ def test_color_points_matches() -> None:
     ]
     rust = [_rust_purchased(cid, chosen) for cid, chosen in purchased_cases]
     py = [_py_purchased(cid, chosen) for cid, chosen in purchased_cases]
-    for colour in GEM_COLORS:
+    for color in GEM_COLORS:
         assert rust_helpers.color_points(
-            rust, getattr(RustColor, colour.name)
-        ) == py_helpers.color_points(py, colour)
+            rust, getattr(RustColor, color.name)
+        ) == py_helpers.color_points(py, color)
 
 
 def test_discard_subsets_matches() -> None:
@@ -224,7 +224,7 @@ def test_can_reserve_matches() -> None:
         tuple([PyColor.GOLD] + [PyColor.WHITE] * 24),
     ]
     for board in boards:
-        rust_board = [getattr(RustColor, colour.name) for colour in board]
+        rust_board = [getattr(RustColor, color.name) for color in board]
         for reserved in (0, 2, 3):
             assert rust_helpers.can_reserve(rust_board, reserved) == (
                 py_helpers.can_reserve(board, reserved)
@@ -264,7 +264,7 @@ def test_visible_cards_matches() -> None:
 
 def test_can_reserve_gold_on_board_is_required() -> None:
     py_board = tuple([PyColor.WHITE] * 25)
-    rust_board = [getattr(RustColor, colour.name) for colour in py_board]
+    rust_board = [getattr(RustColor, color.name) for color in py_board]
     assert rust_helpers.can_reserve(rust_board, 0) == py_helpers.can_reserve(
         py_board, 0
     )

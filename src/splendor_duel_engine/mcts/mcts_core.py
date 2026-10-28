@@ -6,8 +6,6 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from splendor_duel_engine.agents.greedy_agent import GreedyAgent
-from splendor_duel_engine.agents.random_agent import RandomAgent
 from splendor_duel_engine.engine_api import (
     GEM_COLORS,
     Action,
@@ -15,17 +13,7 @@ from splendor_duel_engine.engine_api import (
     apply,
     decide,
     helpers,
-    observation,
 )
-
-# Factory functions for playout policies to ensure fresh RNG per playout.
-# Both are callables accepting a seed derived from the MCTS RNG.
-PLAYOUT_POLICIES = {
-    "greedy": lambda seed: (
-        GreedyAgent()
-    ),  # GreedyAgent doesn't use seed, but keep consistent signature
-    "random": lambda seed: RandomAgent(seed=seed),
-}
 
 
 @dataclass(slots=True)

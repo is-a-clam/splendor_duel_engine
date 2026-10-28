@@ -452,7 +452,7 @@ fn insert_by_id(entries: &mut Vec<(Card, String)>, card: Card, source: String) {
 
 // ===== State transitions =====
 
-/// The seven colours in Python's `Color` declaration order (`for color in Color`).
+/// The seven colors in Python's `Color` declaration order (`for color in Color`).
 const COLOR_ORDER: [Color; 7] = [
     Color::WHITE,
     Color::BLUE,
@@ -892,7 +892,7 @@ fn apply_pay_tokens(state: &GameState, payment: Tokens) -> Result<GameState, &'s
     replace_player(&mut state, active, new_ap);
 
     // Crossing the 3rd or 6th crown threshold (from below) earns one royal pick.
-    // A multicolor card cannot pick yet: its colour choice comes first.
+    // A multicolor card cannot pick yet: its color choice comes first.
     let crossed_royal = (old_crowns < 3 && 3 <= new_crowns) || (old_crowns < 6 && 6 <= new_crowns);
 
     if crossed_royal && !state.royals_available.is_empty() {
@@ -962,7 +962,7 @@ fn resolve_abilities(
     }
 }
 
-/// Enter `TAKE_MATCHING_TOKEN` when the board has a token of the card's colour.
+/// Enter `TAKE_MATCHING_TOKEN` when the board has a token of the card's color.
 fn run_take_matching_token(
     state: GameState,
     card: &Card,
@@ -971,7 +971,7 @@ fn run_take_matching_token(
     if let Some(bonus_color) = card.bonus {
         if state.board.iter().any(|color| *color == Some(bonus_color)) {
             let mut state = state;
-            // Keep `pending_buy` for the decision phase to read the bonus colour.
+            // Keep `pending_buy` for the decision phase to read the bonus color.
             state.phase = Phase::TAKE_MATCHING_TOKEN;
             state.pending_ability = Some(Ability::TAKE_MATCHING_TOKEN);
             return Ok(state);
@@ -1004,7 +1004,7 @@ fn apply_discard_tokens(state: &GameState, tokens: Tokens) -> Result<GameState, 
     finish_turn(state, active, pending_extra_turn)
 }
 
-/// Resolve the chosen colour for a multicolor card, then its ability.
+/// Resolve the chosen color for a multicolor card, then its ability.
 fn apply_choose_multicolor(state: &GameState, color: Color) -> Result<GameState, &'static str> {
     let active = state.current_player;
     let Some(pending) = state.pending_buy.clone() else {

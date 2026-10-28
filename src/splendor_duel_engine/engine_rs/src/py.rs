@@ -1342,10 +1342,10 @@ impl PyGameState {
     }
 }
  
- /// Report missing tokens per colour after bonuses and payment.
+ /// Report missing tokens per color after bonuses and payment.
  ///
- /// Returns an insertion-ordered `dict[Color, int]`: gem colours in
- /// `GEM_COLORS` order, then pearl, and only colours with a positive shortfall.
+ /// Returns an insertion-ordered `dict[Color, int]`: gem colors in
+ /// `GEM_COLORS` order, then pearl, and only colors with a positive shortfall.
  #[pyfunction]
  pub fn cost_deficits<'py>(
      py: Python<'py>,
@@ -1354,10 +1354,10 @@ impl PyGameState {
      paid: &PyTokens,
  ) -> PyResult<Bound<'py, PyDict>> {
      let dict = PyDict::new(py);
-     for (colour, missing) in
+     for (color, missing) in
          rule_helpers::cost_deficits((*cost).into(), (*bonus).into(), (*paid).into())
      {
-         dict.set_item(PyColor::from_inner(colour), missing)?;
+         dict.set_item(PyColor::from_inner(color), missing)?;
      }
      Ok(dict)
  }
@@ -1377,14 +1377,14 @@ impl PyGameState {
          .collect()
  }
  
- /// Return true if taking these colours triggers a penalty.
+ /// Return true if taking these colors triggers a penalty.
  #[pyfunction]
  pub fn take_penalty(colors: Vec<PyColor>) -> bool {
      let colors: Vec<Color> = colors.iter().map(PyColor::inner).collect();
      rule_helpers::take_penalty(&colors)
  }
  
- /// Sum card points for purchased cards of effective colour `color`.
+ /// Sum card points for purchased cards of effective color `color`.
  #[pyfunction]
  pub fn color_points(purchased: Vec<PyPurchasedCard>, color: &PyColor) -> u32 {
      let purchased: Vec<PurchasedCard> = purchased.iter().map(PurchasedCard::from).collect();

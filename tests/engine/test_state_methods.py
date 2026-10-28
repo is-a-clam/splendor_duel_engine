@@ -48,7 +48,7 @@ class TestReplacePlayer:
     def test_replaces_player_at_index(self):
         state = _fresh_state()
         new_player = _sample_player()
-        new_state = state.replace_player(0, new_player)
+        new_state = state.update_player(0, new_player)
 
         assert new_state.players[0] is new_player
         assert new_state.players[1] is state.players[1]
@@ -58,7 +58,7 @@ class TestReplacePlayer:
     def test_replaces_player_at_index_1(self):
         state = _fresh_state()
         new_player = _sample_player()
-        new_state = state.replace_player(1, new_player)
+        new_state = state.update_player(1, new_player)
 
         assert new_state.players[1] is new_player
         assert new_state.players[0] is state.players[0]

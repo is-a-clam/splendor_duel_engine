@@ -8,44 +8,31 @@ reference.
 
 from __future__ import annotations
 
-import dataclasses
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from splendor_duel_engine.engine.board import SPIRAL
-from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard, load_cards
+from splendor_duel_engine.engine.cards import load_cards
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.helpers import add_tokens
 from splendor_duel_engine.engine.phase import Phase
 
 if TYPE_CHECKING:
+    from splendor_duel_engine.engine.cards import Ability, Card, RoyalCard
     from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
 
-#: ``(row_length, deck_index)`` for the ``pyramid`` rows in order (level 3,
-#: level 2, level 1). ``decks`` is stored in the same order — index 0/1/2 is
-#: level 3/2/1 — so a row always refills from ``decks[row]``. The brief's setup
-#: assertion ``[len(d) for d in decks] == [10, 20, 25]`` pins this order
-#: (level 3 minus its 3 pyramid cards, etc.), matching the pyramid ordering.
-_PYRAMID_LAYOUT: tuple[tuple[int, int], ...] = ((3, 0), (4, 1), (5, 2))
 
-#: Total privilege scrolls in the game (spec §Privileges); the second player
-#: starts with one, leaving the rest in the supply.
-_TOTAL_PRIVILEGES: int = 3
-
-#: Total tokens of each gem colour in the game (spec §Components and setup).
+TOTAL_PRIVILEGES: int = 3
 GEM_TOTAL: int = 4
-#: Total pearl tokens in the game (spec §Components and setup).
 PEARL_TOTAL: int = 2
-#: Total gold tokens in the game (spec §Components and setup).
 GOLD_TOTAL: int = 3
-
-#: The 25-token supply in the order it is shuffled at setup (spec: 4 each of
-#: the five gems, 2 pearls, 3 gold). Pinned so the deal is reproducible.
-_TOKEN_SUPPLY: tuple[Color, ...] = (
+TOKEN_SUPPLY: tuple[Color, ...] = (
     tuple(color for color in GEM_COLORS for _ in range(GEM_TOTAL))
     + (Color.PEARL,) * PEARL_TOTAL
     + (Color.GOLD,) * GOLD_TOTAL
 )
+PYRAMID_LAYOUT: tuple[tuple[int, int], ...] = ((3, 0), (4, 1), (5, 2))
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +52,7 @@ class ReservedCard:
     """A card a player holds in reserve.
 
     ``from_deck`` is ``True`` when reserved from a deck top (its identity is
-    hidden from the opponent) and ``False`` when reserved from the pyramid
-    (public). Spec §Hidden information.
+    hidden from the opponent) and ``False`` when reserved from the pyramid.
     """
 
     card: Card
@@ -75,11 +61,9 @@ class ReservedCard:
 
 @dataclass(frozen=True, slots=True)
 class PlayerState:
-    """One player's full state. Spec §Hidden information (public by deduction)."""
+    """One player's full state"""
 
     tokens: Tokens
-    #: Colour bonuses. Reuses :class:`Tokens`, but only gem counts are allowed:
-    #: ``bonus.pearl`` and ``bonus.gold`` must stay 0. Task 6 must preserve this.
     bonus: Tokens
     prestige: int
     crowns: int
@@ -92,16 +76,18 @@ class PlayerState:
 class GameState:
     """The complete, immutable state of a game.
 
-    ``board`` is 25 row-major entries (``None`` only ever marks an empty token
-    space). ``decks`` is indexed 0/1/2 for levels 1/2/3 with the top card last
-    (dealt by popping the end). ``pyramid`` rows are levels 3, 2, 1 (lengths
-    3, 4, 5); a slot is ``None`` only when its deck is exhausted.
+    ``board`` is 25 row-major entries (``None`` marks an empty token space).
+    ``decks`` is indexed 0/1/2 for levels 1/2/3 with the top card last.
+    ``pyramid`` rows are levels 3, 2, 1 (lengths 3, 4, 5); a slot is ``None``
+    only when its deck is exhausted.
     """
+
+    rng: random.Random = field(compare=False, repr=False)
 
     players: tuple[PlayerState, PlayerState]
     board: tuple[Color | None, ...]
     bag: Tokens
-    decks: tuple[tuple[Card, ...], tuple[Card, ...], tuple[Card, ...]]
+    decks: tuple[tuple[Card, ...], ...]
     pyramid: tuple[tuple[Card | None, ...], ...]
     royals_available: tuple[RoyalCard, ...]
     privileges_supply: int
@@ -110,105 +96,93 @@ class GameState:
     phase: Phase
     pending_buy: BuyCard | None
     pending_reserve: ReserveCard | None
-    #: Excluded from equality/repr: two games from the same seed compare equal
-    #: even though their RNG streams are separate objects.
-    rng: random.Random = field(compare=False, repr=False)
-    #: True when the current player has earned an extra turn (via EXTRA_TURN
-    #: ability or royal). Cleared when the extra turn is consumed.
     extra_turn: bool = False
-    #: Stores the ability being resolved during a decision point phase
-    #: (STEAL_TOKEN). None otherwise.
     pending_ability: Ability | None = None
-    #: True when a purchase crossed a crown threshold but the royal pick was
-    #: deferred because the card was multicolor (its color must be chosen
-    #: first). Cleared when the royal step runs in ``_end_of_turn``.
     pending_royal: bool = False
 
     # ===== State update methods =====
 
-    def replace_player(self, player_idx: int, new_player: PlayerState) -> GameState:
+    def update_player(self, player_idx: int, new_player: PlayerState) -> GameState:
         """Replace one player in the players tuple."""
-        new_players = list(self.players)
-        new_players[player_idx] = new_player
-        return dataclasses.replace(self, players=(new_players[0], new_players[1]))
+        players = list(self.players)
+        players[player_idx] = new_player
+        new_players = (players[0], players[1])
+        return replace(self, players=new_players)
 
     def update_board(self, idx: int, new_color: Color | None) -> GameState:
         """Update a single board index."""
         board = list(self.board)
         board[idx] = new_color
-        return dataclasses.replace(self, board=tuple(board))
+        new_board = tuple(board)
+        return replace(self, board=new_board)
 
     def remove_from_board(self, idx: int) -> GameState:
         """Set a board index to None (remove token)."""
         board = list(self.board)
         board[idx] = None
-        return dataclasses.replace(self, board=tuple(board))
+        new_board = tuple(board)
+        return replace(self, board=new_board)
 
     def add_to_bag(self, tokens: Tokens) -> GameState:
         """Add tokens to bag."""
-        new_bag_dict = {c.value: self.bag.count(c) + tokens.count(c) for c in Color}
-        return dataclasses.replace(self, bag=Tokens(**new_bag_dict))
+        new_bag = add_tokens(self.bag, tokens)
+        return replace(self, bag=new_bag)
 
     def pop_deck(self, deck_idx: int) -> tuple[Card, GameState]:
         """Pop top card from deck and return (card, new_state)."""
-        new_decks = [list(d) for d in self.decks]
-        card = new_decks[deck_idx].pop()
-        new_state = dataclasses.replace(self, decks=tuple(tuple(d) for d in new_decks))
-        return card, new_state
+        decks = [list(d) for d in self.decks]
+        card = decks[deck_idx].pop()
+        new_decks = tuple(tuple(d) for d in decks)
+        return card, replace(self, decks=new_decks)
 
-    def take_pyramid_card(
-        self, row_idx: int, col_idx: int
-    ) -> tuple[Card | None, GameState]:
+    def take_pyramid_card(self, row_idx: int, col_idx: int) -> tuple[Card | None, GameState]:
         """Take card from pyramid slot and refill from corresponding deck in one atomic operation.
 
         Returns (card, new_state). If the corresponding deck is empty, the slot stays empty.
         """
-        new_pyramid = [list(r) for r in self.pyramid]
-        new_decks = [list(d) for d in self.decks]
+        pyramid = [list(r) for r in self.pyramid]
+        decks = [list(d) for d in self.decks]
 
-        card = new_pyramid[row_idx][col_idx]
-        new_pyramid[row_idx][col_idx] = None
+        card = pyramid[row_idx][col_idx]
+        pyramid[row_idx][col_idx] = None
 
         # Refill from corresponding deck
-        deck = new_decks[row_idx]
+        deck = decks[row_idx]
         if deck:
-            new_pyramid[row_idx][col_idx] = deck.pop()
+            pyramid[row_idx][col_idx] = deck.pop()
 
-        new_state = dataclasses.replace(
-            self,
-            pyramid=tuple(tuple(r) for r in new_pyramid),
-            decks=tuple(tuple(d) for d in new_decks),
-        )
-        return card, new_state
+        new_pyramid = tuple(tuple(r) for r in pyramid)
+        new_decks = tuple(tuple(d) for d in decks)
+
+        return card, replace(self, pyramid=new_pyramid, decks=new_decks)
 
     def grant_privilege(self, recipient: int) -> GameState:
         """Grant 1 privilege to recipient from supply, or steal from other player."""
         other = 1 - recipient
-        new_players = [self.players[0], self.players[1]]
-        new_supply = self.privileges_supply
-        if new_supply > 0:
-            new_supply = self.privileges_supply - 1
-            new_players[recipient] = dataclasses.replace(
-                self.players[recipient],
-                privileges=self.players[recipient].privileges + 1,
-            )
-        else:
-            # Steal from other player
-            if self.players[other].privileges > 0:
-                new_players[other] = dataclasses.replace(
-                    self.players[other], privileges=self.players[other].privileges - 1
-                )
-                new_players[recipient] = dataclasses.replace(
-                    self.players[recipient],
-                    privileges=self.players[recipient].privileges + 1,
-                )
-        return dataclasses.replace(
-            self,
-            players=(new_players[0], new_players[1]),
-            privileges_supply=new_supply,
-        )
+        players = [self.players[0], self.players[1]]
+        supply = self.privileges_supply
 
-    # ===== Factory classmethods =====
+        if supply > 0:
+            supply = self.privileges_supply - 1
+            players[recipient] = replace(
+                players[recipient],
+                privileges=players[recipient].privileges + 1,
+            )
+        elif self.players[other].privileges > 0:
+            players[other] = replace(
+                players[other],
+                privileges=players[other].privileges - 1
+            )
+            players[recipient] = replace(
+                players[recipient],
+                privileges=players[recipient].privileges + 1,
+            )
+        
+        new_players = (players[0], players[1])
+
+        return replace(self, players=new_players, privileges_supply=supply,)
+
+    # ===== Factory class methods =====
 
     @classmethod
     def new_game(cls, seed: int) -> GameState:
@@ -216,9 +190,7 @@ class GameState:
         rng = random.Random(seed)
         jewels, royals = load_cards()
 
-        # (a) Shuffle each deck separately, level 1 then 2 then 3 (pinned RNG
-        # order). Each shuffled list is stored so decks[0/1/2] is level 3/2/1,
-        # matching the pyramid rows; the deck top is the last element.
+        # Shuffle each deck separately.
         shuffled: dict[int, list[Card]] = {}
         for level in (1, 2, 3):
             level_cards = [card for card in jewels if card.level == level]
@@ -226,20 +198,20 @@ class GameState:
             shuffled[level] = level_cards
         decks = [shuffled[3], shuffled[2], shuffled[1]]
 
-        # (b) Deal the pyramid, each row left-to-right from its deck's top.
+        # Deal the pyramid, each row left-to-right from its deck's top.
         pyramid = tuple(
             tuple(decks[deck_index].pop() for _ in range(row_length))
-            for row_length, deck_index in _PYRAMID_LAYOUT
+            for row_length, deck_index in PYRAMID_LAYOUT
         )
 
-        # (c) Shuffle the token supply once and deal it along the spiral.
-        supply = list(_TOKEN_SUPPLY)
+        # Shuffle the token supply once and deal it along the spiral.
+        supply = list(TOKEN_SUPPLY)
         rng.shuffle(supply)
         board: list[Color | None] = [None] * len(SPIRAL)
         for index, color in zip(SPIRAL, supply, strict=True):
             board[index] = color
 
-        # (d) Pick the first player.
+        # Pick the first player.
         current_player = rng.randrange(2)
 
         players = (
@@ -248,22 +220,19 @@ class GameState:
         )
 
         return cls(
+            rng=rng,
             players=players,
             board=tuple(board),
             bag=Tokens(),
-            decks=(tuple(decks[0]), tuple(decks[1]), tuple(decks[2])),
+            decks=tuple(tuple(deck) for deck in decks),
             pyramid=pyramid,
             royals_available=royals,
-            privileges_supply=_TOTAL_PRIVILEGES - 1,  # second player took one
+            privileges_supply=TOTAL_PRIVILEGES - 1,  # second player took one
             current_player=current_player,
             winner=None,
-            # First player opens in USE_PRIVILEGES (plan pre-flight ruling,
-            # conflict-1). They hold 0 privileges and the bag is empty, so both
-            # opening steps are no-ops, but the phase matches the plan interface.
             phase=Phase.USE_PRIVILEGES,
             pending_buy=None,
             pending_reserve=None,
-            rng=rng,
             extra_turn=False,
             pending_ability=None,
             pending_royal=False,

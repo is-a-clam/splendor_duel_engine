@@ -16,7 +16,7 @@ from splendor_duel_engine.engine.actions import (
     decide,
 )
 from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.helpers import can_afford_card
+from splendor_duel_engine.engine.helpers import can_afford_card, get_tokens, total_tokens
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, ReservedCard
 
@@ -136,7 +136,7 @@ def test_gold_pays_as_any_color_or_pearl():
     new_pyramid = [list(r) for r in base_st.pyramid]
     new_pyramid[2][0] = None
     reserved_card = ReservedCard(card=card, from_deck=False)
-    total_cost = sum(card.cost.count(c) for c in Color) + card.cost.pearl
+    total_cost = sum(get_tokens(card.cost, c) for c in Color) + card.cost.pearl
     st = replace(
         base_st,
         current_player=0,
@@ -165,7 +165,7 @@ def test_gold_pays_as_any_color_or_pearl():
     pay_actions = [a for a in dp2.legal_actions if isinstance(a, PayTokens)]
     assert len(pay_actions) > 0
     # At least one payment should use only gold
-    gold_only_payments = [p for p in pay_actions if p.payment.total() == p.payment.gold]
+    gold_only_payments = [p for p in pay_actions if total_tokens(p.payment) == p.payment.gold]
     assert len(gold_only_payments) > 0
 
 
@@ -286,7 +286,7 @@ def test_spent_tokens_go_to_bag():
     st3 = apply(st2, decide(st2).legal_actions[0])
 
     # Bag should have received the spent tokens
-    assert st3.bag.total() > 0
+    assert total_tokens(st3.bag) > 0
     assert st3.bag.gold > 0 or st3.bag.white > 0
 
 
@@ -333,7 +333,7 @@ def test_buy_grants_bonus_prestige_crowns():
     st3 = apply(st2, decide(st2).legal_actions[0])
 
     # Check bonus granted
-    assert st3.players[0].bonus.count(card.bonus) == 1
+    assert get_tokens(st3.players[0].bonus, card.bonus) == 1
     # Check prestige granted
     assert st3.players[0].prestige == card.points
     # Check crowns granted
@@ -431,10 +431,10 @@ def test_choose_payment_phase_offers_only_legal_payments():
     # Every offered payment must be legal
     for pay in pay_actions:
         bonus = st2.players[0].bonus
-        assert can_afford_card(card, pay.payment, bonus)
+        assert can_afford_card(card, bonus, pay.payment)
         # Payment must not exceed player's tokens
         for color in Color:
-            assert pay.payment.count(color) <= st2.players[0].tokens.count(color)
+            assert get_tokens(pay.payment, color) <= get_tokens(st2.players[0].tokens, color)
 
     # At least one payment must exist for an affordable card
     assert len(pay_actions) > 0

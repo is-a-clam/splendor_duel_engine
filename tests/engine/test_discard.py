@@ -123,7 +123,7 @@ def test_discard_subset_sum_equals_excess_and_tokens_reach_bag():
         )
         assert key not in seen
         seen.add(key)
-    # Three distinct single-colour discards: white, blue or green.
+    # Three distinct single-color discards: white, blue or green.
     assert len(dp.legal_actions) == 3
 
     total_before = _total(st)
@@ -148,7 +148,7 @@ def test_discard_subset_sum_equals_excess_and_tokens_reach_bag():
     assert st.current_player == 1
 
 
-def test_discard_can_use_gold_and_pearls_and_offers_multicolour_subsets():
+def test_discard_can_use_gold_and_pearls_and_offers_multicolor_subsets():
     """Discard subsets may include gold and pearls, not only the five gems."""
     hand = Tokens(white=9, gold=2, pearl=1)  # total 12 => excess 2
     st = board_state(
@@ -219,7 +219,7 @@ def test_mid_turn_gain_over_ten_is_fine_until_end_of_turn():
     # means the turn ends in DISCARD.
     assert st.players[0].tokens.total() == 12
     assert st.phase is Phase.DISCARD
-    # 3 same-colour tokens is a penalty, so the opponent gained a privilege.
+    # 3 same-color tokens is a penalty, so the opponent gained a privilege.
     assert st.current_player == 0  # still resolving this turn (discard)
 
     # Resolving the discard downs to exactly 10 and passes the turn.

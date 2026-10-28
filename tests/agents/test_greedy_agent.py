@@ -20,7 +20,7 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.cards import Ability, Card, load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.observation import Observation, observation
+from splendor_duel_engine.engine.observation import Observation, get_observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState, ReservedCard
 
@@ -67,14 +67,14 @@ def _observation_with_visible_card(card: Card, tokens: Tokens) -> Observation:
         ),
         pyramid=((card, None, None), (None,) * 4, (None,) * 5),
     )
-    return observation(st, 0)
+    return get_observation(st, 0)
 
 
 def test_greedy_agent_chooses_legal_action():
     agent = GreedyAgent()
     assert isinstance(agent, Agent)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions
@@ -89,7 +89,7 @@ def test_greedy_agent_deterministic():
         if state.winner is not None:
             break
         player = state.current_player
-        obs = observation(state, player)
+        obs = get_observation(state, player)
         dp = decide(state)
         a1 = agent1.choose_action(obs, dp.legal_actions)
         a2 = agent2.choose_action(obs, dp.legal_actions)
@@ -112,7 +112,7 @@ def test_greedy_always_declines_a_voluntary_replenish():
     dp = decide(base)
     assert any(isinstance(a, Replenish) for a in dp.legal_actions)
     assert any(isinstance(a, DoneWithReplenish) for a in dp.legal_actions)
-    action = agent.choose_action(observation(base, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(base, 0), dp.legal_actions)
     assert isinstance(action, DoneWithReplenish)
 
     # Blocked mandatory phase *and* a bag worth more than five tokens: the
@@ -130,7 +130,7 @@ def test_greedy_always_declines_a_voluntary_replenish():
     dp = decide(empty_handed)
     assert any(isinstance(a, Replenish) for a in dp.legal_actions)
     assert any(isinstance(a, DoneWithReplenish) for a in dp.legal_actions)
-    action = agent.choose_action(observation(empty_handed, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(empty_handed, 0), dp.legal_actions)
     assert isinstance(action, DoneWithReplenish)
 
     # Forced: MANDATORY would have no legal action, so the engine offers
@@ -138,13 +138,13 @@ def test_greedy_always_declines_a_voluntary_replenish():
     blocked = replace(base, phase=Phase.MANDATORY, board=(None,) * 25)
     dp = decide(blocked)
     assert [type(a) for a in dp.legal_actions] == [Replenish]
-    action = agent.choose_action(observation(blocked, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(blocked, 0), dp.legal_actions)
     assert isinstance(action, Replenish)
 
 
-def test_needed_colours_repeat_once_per_missing_token():
-    # The needed-colour list is a multiset with one entry per missing token,
-    # not one entry per colour: the discard scoring counts that multiset, so
+def test_needed_colors_repeat_once_per_missing_token():
+    # The needed-color list is a multiset with one entry per missing token,
+    # not one entry per color: the discard scoring counts that multiset, so
     # collapsing it would change the discard tie-break.
     agent = GreedyAgent()
     card = Card(
@@ -169,7 +169,7 @@ def test_greedy_buys_the_first_maximum_value_visible_card():
     # first maximum among the BuyCard actions `decide()` offers, so an earlier
     # equal-value card wins. Order of `helpers.visible_cards` is a different
     # contract, pinned in
-    # test_needed_colours_follow_the_visible_cards_contract_order below.
+    # test_needed_colors_follow_the_visible_cards_contract_order below.
     agent = GreedyAgent()
     first = Card(
         id="A",
@@ -203,13 +203,13 @@ def test_greedy_buys_the_first_maximum_value_visible_card():
         pyramid=((first, second, None), (None,) * 4, (None,) * 5),
     )
     dp = decide(st)
-    action = agent.choose_action(observation(st, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(st, 0), dp.legal_actions)
     assert isinstance(action, BuyCard)
     assert action.card.id == "A"
 
 
-def test_needed_colours_follow_the_visible_cards_contract_order():
-    # The order-sensitive consumer of `visible_cards` is the needed-colour
+def test_needed_colors_follow_the_visible_cards_contract_order():
+    # The order-sensitive consumer of `visible_cards` is the needed-color
     # lookup: it picks the best affordable card with max(), which returns the
     # first maximum, and that card's deficits become the multiset that drives
     # the take-action scoring. Two equally valuable cards with different costs
@@ -251,7 +251,7 @@ def test_needed_colours_follow_the_visible_cards_contract_order():
             ),
             pyramid=(row, (None,) * 4, (None,) * 5),
         )
-        return agent._colors_needed_for_best_purchase(observation(st, 0))
+        return agent._colors_needed_for_best_purchase(get_observation(st, 0))
 
     assert needed((white_card, blue_card, None)) == [Color.WHITE, Color.WHITE]
     assert needed((blue_card, white_card, None)) == [Color.BLUE] * 3
@@ -265,7 +265,7 @@ def test_greedy_prefers_buying_high_value_affordable_card():
         base,
         players=(replace(base.players[0], tokens=Tokens(gold=20)), base.players[1]),
     )
-    obs = observation(st, 0)
+    obs = get_observation(st, 0)
     best = max(
         (
             card
@@ -293,7 +293,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
     st_a = replace(base, board=tuple(board_a))
     dp_a = decide(st_a)
     assert not any(isinstance(a, ReserveCard) for a in dp_a.legal_actions)
-    action = agent.choose_action(observation(st_a, 0), dp_a.legal_actions)
+    action = agent.choose_action(get_observation(st_a, 0), dp_a.legal_actions)
     assert isinstance(action, TakeTokens)
 
     # (b) Gold on board but 3 cards reserved -> still no ReserveCard offered
@@ -308,7 +308,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
     )
     dp_b = decide(st_b)
     assert not any(isinstance(a, ReserveCard) for a in dp_b.legal_actions)
-    action = agent.choose_action(observation(st_b, 0), dp_b.legal_actions)
+    action = agent.choose_action(get_observation(st_b, 0), dp_b.legal_actions)
     assert isinstance(action, TakeTokens)
 
     # (c) Gold on board, free slot, visible 6-point card -> reserve that card
@@ -320,7 +320,7 @@ def test_greedy_reserves_only_when_gold_needed_and_slots_available():
         pyramid=((six_pointer, None, None), (None,) * 4, (None,) * 5),
     )
     dp_c = decide(st_c)
-    action = agent.choose_action(observation(st_c, 0), dp_c.legal_actions)
+    action = agent.choose_action(get_observation(st_c, 0), dp_c.legal_actions)
     assert action == ReserveCard(source="pyramid", index=0)
 
 
@@ -349,14 +349,14 @@ def test_greedy_avoids_penalty_unless_high_value_purchase_enabled():
     # white=5: only the 3-line reaches white=8 -> take the penalty line
     enabling = make_state(Tokens(white=5))
     dp = decide(enabling)
-    action = agent.choose_action(observation(enabling, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(enabling, 0), dp.legal_actions)
     assert action == TakeTokens((0, 1, 2))
 
     # white=3: no take makes the card affordable -> avoid the penalty line
     # (among penalty-free options the table's scoring picks the 2-white line)
     safe = make_state(Tokens(white=3))
     dp = decide(safe)
-    action = agent.choose_action(observation(safe, 0), dp.legal_actions)
+    action = agent.choose_action(get_observation(safe, 0), dp.legal_actions)
     assert isinstance(action, TakeTokens)
     assert action != TakeTokens((0, 1, 2))
 
@@ -371,7 +371,7 @@ def test_greedy_multicolor_chooses_most_bonus_color():
             base.players[1],
         ),
     )
-    obs = observation(st, 0)
+    obs = get_observation(st, 0)
     legal = (ChooseMulticolor(Color.BLUE), ChooseMulticolor(Color.WHITE))
     assert GreedyAgent().choose_action(obs, legal) == ChooseMulticolor(Color.WHITE)
 
@@ -396,7 +396,7 @@ def test_greedy_discard_prefers_excess_colors_not_needed():
             base.players[1],
         ),
     )
-    obs = observation(st, 0)
+    obs = get_observation(st, 0)
     dp = decide(st)
     action = GreedyAgent().choose_action(obs, dp.legal_actions)
     assert action == DiscardTokens(tokens=Tokens(red=2))
@@ -427,7 +427,7 @@ def test_greedy_use_privileges_takes_needed_color_for_best_affordable_card():
         ),
     )
     dp = decide(st)
-    action = GreedyAgent().choose_action(observation(st, 0), dp.legal_actions)
+    action = GreedyAgent().choose_action(get_observation(st, 0), dp.legal_actions)
     assert action == UsePrivilege(index=7)
 
 
@@ -449,13 +449,13 @@ def test_greedy_use_privileges_takes_contested_color_when_nothing_affordable():
         players=(replace(base.players[0], privileges=1), base.players[1]),
     )
     dp = decide(st)
-    action = GreedyAgent().choose_action(observation(st, 0), dp.legal_actions)
+    action = GreedyAgent().choose_action(get_observation(st, 0), dp.legal_actions)
     assert action == UsePrivilege(index=10)
 
 
 def test_greedy_royal_prefers_extra_turn_ability():
     base = board_state(current_player=0)
-    obs = observation(base, 0)
+    obs = get_observation(base, 0)
     extra = next(r for r in obs.royals_available if r.ability == Ability.EXTRA_TURN)
     no_ability = next(r for r in obs.royals_available if r.ability is None)
     legal = (ChooseRoyal(royal_id=no_ability.id), ChooseRoyal(royal_id=extra.id))
@@ -464,7 +464,7 @@ def test_greedy_royal_prefers_extra_turn_ability():
 
 def test_greedy_payment_prefers_fewest_gold_then_fewest_tokens():
     base = board_state(current_player=0)
-    obs = observation(base, 0)
+    obs = get_observation(base, 0)
     legal = (
         PayTokens(payment=Tokens(gold=4)),
         PayTokens(payment=Tokens(white=2, gold=2)),

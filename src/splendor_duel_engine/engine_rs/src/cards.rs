@@ -58,7 +58,7 @@ pub struct Card {
     pub cost: Tokens,
 }
 
-/// A royal card: prestige and at most one ability, never a colour.
+/// A royal card: prestige and at most one ability, never a color.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RoyalCard {
     pub id: String,

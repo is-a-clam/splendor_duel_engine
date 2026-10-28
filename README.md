@@ -13,7 +13,7 @@ src/splendor_duel_engine/
   mcts/        MCTS helper functions
   training/    (future) Self-play, replay buffer, network training
   data/        Card data (cards.json)
-  engine_rs/   (future) Rust port of python engine (splendor_duel_engine._core)
+  engine_rs/   Rust port of python engine (splendor_duel_engine._core)
 ```
 
 ## Installation

@@ -8,7 +8,7 @@ from splendor_duel_engine.engine.actions import (
     apply,
     decide,
 )
-from splendor_duel_engine.engine.observation import observation
+from splendor_duel_engine.engine.observation import get_observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState
 
@@ -20,7 +20,7 @@ def _opening_mandatory_decision():
     if state.phase == Phase.REPLENISH:
         state = apply(state, DoneWithReplenish())
     assert state.phase == Phase.MANDATORY
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     assert len(dp.legal_actions) > 1
     return obs, dp.legal_actions
@@ -29,7 +29,7 @@ def _opening_mandatory_decision():
 def test_random_agent_chooses_legal_action():
     agent = RandomAgent(seed=42)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions

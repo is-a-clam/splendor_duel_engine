@@ -28,7 +28,7 @@ pub struct ReservedCard {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PlayerState {
     pub tokens: Tokens,
-    /// Colour bonuses. Only gem counts are allowed; pearl/gold must stay 0.
+    /// color bonuses. Only gem counts are allowed; pearl/gold must stay 0.
     pub bonus: Tokens,
     pub prestige: u32,
     pub crowns: u32,

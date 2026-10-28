@@ -7,7 +7,7 @@ from splendor_duel_engine._core import GameState as RustGameState
 from splendor_duel_engine._core import GameState as RustGameState
 from splendor_duel_engine._core import observation as rust_observation
 
-from splendor_duel_engine.engine.observation import observation as py_observation
+from splendor_duel_engine.engine.observation import get_observation as py_observation
 from splendor_duel_engine.engine.state import GameState as PyGameState
 from tests.engine_rs.parity import observation_fingerprint, state_fingerprint
 

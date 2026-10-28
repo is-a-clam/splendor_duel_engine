@@ -10,23 +10,21 @@ and validates that the data still matches the spec's pinned counts.
 
 from __future__ import annotations
 
-import enum
 import json
 import pathlib
-from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING
 
-from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.colors import GEM_COLORS, PAY_COLORS, Color, Tokens
 
-#: Packaged card data, loaded by :func:`load_cards` when no path is given.
-#: Assumes repo layout: <repo>/src/splendor_duel_engine/data/cards.json
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+
 CARDS_PATH: pathlib.Path = pathlib.Path(__file__).parents[1] / "data" / "cards.json"
 
-# Cost keys are the five gems plus pearls; gold is wild and never a card cost.
-_COST_KEYS: frozenset[str] = frozenset(color.value for color in GEM_COLORS) | {
-    Color.PEARL.value
-}
-
+_COST_KEYS: frozenset[str] = frozenset(color.value for color in PAY_COLORS)
 _EXPECTED_JEWEL_CARDS: int = 67
 _EXPECTED_LEVEL_COUNTS: dict[int, int] = {1: 30, 2: 24, 3: 13}
 _EXPECTED_TOTAL_CROWNS: int = 28
@@ -35,11 +33,9 @@ _EXPECTED_MULTICOLOR_CARDS: int = 9
 _EXPECTED_ROYAL_CARDS: int = 4
 
 
-class Ability(str, enum.Enum):
-    """A printed card ability; values match the keys in ``cards.json``.
-
-    Spec §Card abilities. These are the four printed abilities; multicolor is a
-    separate card property (:attr:`Card.is_multicolor`), not an ability.
+class Ability(Enum):
+    """
+    A printed card ability; values match the keys in ``cards.json``.
     """
 
     EXTRA_TURN = "extra_turn"
@@ -50,12 +46,11 @@ class Ability(str, enum.Enum):
 
 @dataclass(frozen=True, slots=True)
 class Card:
-    """A jewel card.
+    """
+    A jewel card.
 
     ``is_multicolor`` marks the copy-bonus (joker) cards; it is orthogonal to
     ``ability``, so a card may be multicolor and still carry a printed ability
-    (``L3-01``). ``bonus`` is the card's colour bonus, or ``None`` for the
-    multicolor cards and the three colorless point cards (``bonus_count == 0``).
     """
 
     id: str
@@ -71,7 +66,7 @@ class Card:
 
 @dataclass(frozen=True, slots=True)
 class RoyalCard:
-    """A royal card: prestige and at most one ability, never a colour."""
+    """A royal card: prestige and at most one ability"""
 
     id: str
     points: int

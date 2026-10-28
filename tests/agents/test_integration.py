@@ -4,7 +4,7 @@ These tests exercise the agent stack end to end through :func:`play_game`.
 Every game uses a fixed engine seed and deterministic agents, so failures are
 reproducible. The three win conditions are defined in
 ``actions.winner_of``: 20 prestige, 10 crowns, or 10 prestige in one gem
-colour.
+color.
 """
 
 from splendor_duel_engine.agents.base import play_game

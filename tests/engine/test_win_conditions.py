@@ -5,8 +5,8 @@ checked only at the end of the active player's turn, after abilities, royal
 picks and discard, and ends the game immediately:
   1. >= 20 prestige, or
   2. >= 10 crowns, or
-  3. >= 10 prestige on cards of one colour (multicolor cards count as their
-     chosen colour; colorless no-bonus cards and royals do not count).
+  3. >= 10 prestige on cards of one color (multicolor cards count as their
+     chosen color; colorless no-bonus cards and royals do not count).
 """
 
 from dataclasses import replace
@@ -107,9 +107,9 @@ def test_win_at_10_crowns():
 
 
 def test_win_at_10_points_in_one_color():
-    """10 prestige among one colour wins; a multicolor card counts as its chosen colour."""
+    """10 prestige among one color wins; a multicolor card counts as its chosen color."""
     # Six red points on red cards + four red points on a multicolor card whose
-    # chosen colour is red => exactly 10 red.
+    # chosen color is red => exactly 10 red.
     st = board_state(
         current_player=0,
         players=(
@@ -130,7 +130,7 @@ def test_win_at_10_points_in_one_color():
 
 
 def test_multicolor_counts_only_for_its_chosen_color():
-    """A multicolor card contributes to exactly one colour: its chosen colour."""
+    """A multicolor card contributes to exactly one color: its chosen color."""
     # 9 red on red cards + a 3-point multicolor chosen RED would win, but the
     # same card chosen BLUE must not.
     pieces = (
@@ -155,7 +155,7 @@ def test_multicolor_counts_only_for_its_chosen_color():
 def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
     """Colorless no-bonus cards and royals add to the 20-point total only."""
     # 9 black points on black cards + a colorless 6-point card: color total is
-    # 9 (no colour victory), but prestige 15 is still under 20.
+    # 9 (no color victory), but prestige 15 is still under 20.
     st = board_state(
         current_player=0,
         players=(
@@ -164,7 +164,7 @@ def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
                     _purchased("L3-07", None),  # 4 black
                     _purchased("L3-02", None),  # 3 black
                     _purchased("L2-12", None),  # 2 black => 9 black
-                    _purchased("L3-12", None),  # 6 pts, colorless => no colour
+                    _purchased("L3-12", None),  # 6 pts, colorless => no color
                 )
             ),
             _player(),
@@ -174,7 +174,7 @@ def test_royal_and_colorless_cards_do_not_count_for_color_win_but_do_for_20():
         helpers.is_winner(st.players[0]) is False
     )  # 9 black, not 10; 15 prestige, not 20
 
-    # Add a royal (3 points, colorless): prestige 18, still no colour win.
+    # Add a royal (3 points, colorless): prestige 18, still no color win.
     with_royal = replace(
         st,
         players=(
@@ -237,7 +237,7 @@ def test_extra_turn_does_not_defer_win_check():
 
     # Exactly 18 red points; L3-01 (chosen red) takes red to 21 and total > 20.
     p0 = _player(
-        bonus=Tokens(white=1),  # coloured bonus so the multicolor card is buyable
+        bonus=Tokens(white=1),  # colored bonus so the multicolor card is buyable
         tokens=Tokens(gold=10),
         prestige=18,
         reserved=(reserved,),
@@ -251,7 +251,7 @@ def test_extra_turn_does_not_defer_win_check():
     pay = next(a for a in decide(st).legal_actions if isinstance(a, PayTokens))
     st = apply(st, pay)
 
-    # Multicolor colour choice, then the EXTRA_TURN ability resolves.
+    # Multicolor color choice, then the EXTRA_TURN ability resolves.
     assert st.phase is Phase.MULTICOLOR_COLOR
     choose = next(
         a for a in decide(st).legal_actions if isinstance(a, ChooseMulticolor)

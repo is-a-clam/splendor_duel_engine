@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from splendor_duel_engine.agents.mcts_agent import MCTSAgent
 from splendor_duel_engine.engine.actions import decide
-from splendor_duel_engine.engine.observation import observation
+from splendor_duel_engine.engine.observation import get_observation
 from splendor_duel_engine.engine.state import GameState
 
 
 def test_mcts_agent_chooses_legal_action():
     agent = MCTSAgent(seed=42, max_playouts=100)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions
@@ -21,7 +21,7 @@ def test_mcts_agent_deterministic_with_same_seed():
     agent1 = MCTSAgent(seed=123, max_playouts=200)
     agent2 = MCTSAgent(seed=123, max_playouts=200)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     a1 = agent1.choose_action(obs, dp.legal_actions)
     a2 = agent2.choose_action(obs, dp.legal_actions)
@@ -43,7 +43,7 @@ def test_mcts_agent_different_seeds_different_actions():
     state = apply(state, DoneWithPrivileges())
     state = apply(state, DoneWithReplenish())
     assert state.phase == Phase.MANDATORY
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     # Run multiple trials; with different seeds, actions should differ in at least some cases.
     # With >1 legal action and different seeds, probability of all 10 matching is extremely low.
@@ -69,7 +69,7 @@ def test_mcts_agent_respects_max_playouts():
     # With very low playouts, should still return a legal action
     agent = MCTSAgent(seed=0, max_playouts=10)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions
@@ -78,7 +78,7 @@ def test_mcts_agent_respects_max_playouts():
 def test_mcts_agent_random_playout_policy():
     agent = MCTSAgent(seed=42, max_playouts=100)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions
@@ -89,7 +89,7 @@ def test_mcts_agent_re_determinizes_each_decision():
     # should produce different determinizations and potentially different actions
     agent = MCTSAgent(seed=0, max_playouts=200)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     # Run multiple trials; re-determinization should produce varied actions.
     # If only 1 legal action, all will be the same (expected).
@@ -174,7 +174,7 @@ def test_mcts_agent_multi_sample_differs_from_single():
     assert state.phase == Phase.MANDATORY
     assert len(state.players[0].reserved) == 1  # player 0 has a face-down reserve
 
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
 
     # Run many trials with single-sample and multi-sample
@@ -226,7 +226,7 @@ def test_mcts_agent_runs_mcts_for_non_mandatory_phases():
     assert reserve_action is not None, "No pyramid reserve action available"
     state = apply(state, reserve_action)
     assert state.phase == Phase.CHOOSE_GOLD
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     assert len(dp.legal_actions) > 1, "Should have multiple gold tokens to choose from"
 
@@ -242,7 +242,7 @@ def test_mcts_agent_backward_compat_num_determinizations_one():
     """num_determinizations=1 should behave like the old single-sample MCTS."""
     agent = MCTSAgent(seed=42, max_playouts=100, num_determinizations=1)
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = agent.choose_action(obs, dp.legal_actions)
     assert action in dp.legal_actions

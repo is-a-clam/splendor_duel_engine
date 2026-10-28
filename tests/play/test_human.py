@@ -27,11 +27,11 @@ def test_human_agent_reprompts_on_invalid_input():
         print_fn=lambda *a, **k: outputs.append(" ".join(str(x) for x in a)),
     )
     from splendor_duel_engine.engine.actions import decide
-    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.observation import get_observation
     from splendor_duel_engine.engine.state import GameState
 
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     action = human.choose_action(obs, dp.legal_actions)
     assert action == dp.legal_actions[0]
@@ -45,11 +45,11 @@ def test_human_agent_renders_observation_not_hidden_info():
         print_fn=lambda *a, **k: rendered.append(" ".join(str(x) for x in a)),
     )
     from splendor_duel_engine.engine.actions import decide
-    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.observation import get_observation
     from splendor_duel_engine.engine.state import GameState
 
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     human.choose_action(obs, dp.legal_actions)
     text = "\n".join(rendered)
@@ -93,11 +93,11 @@ def test_human_agent_input_terminated():
         print_fn=lambda *a, **k: outputs.append(" ".join(str(x) for x in a)),
     )
     from splendor_duel_engine.engine.actions import decide
-    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.observation import get_observation
     from splendor_duel_engine.engine.state import GameState
 
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     with pytest.raises(SystemExit):
         human.choose_action(obs, dp.legal_actions)
@@ -115,11 +115,11 @@ def test_human_agent_eof_terminated():
         print_fn=lambda *a, **k: outputs.append(" ".join(str(x) for x in a)),
     )
     from splendor_duel_engine.engine.actions import decide
-    from splendor_duel_engine.engine.observation import observation
+    from splendor_duel_engine.engine.observation import get_observation
     from splendor_duel_engine.engine.state import GameState
 
     state = GameState.new_game(0)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     dp = decide(state)
     with pytest.raises(SystemExit):
         human.choose_action(obs, dp.legal_actions)

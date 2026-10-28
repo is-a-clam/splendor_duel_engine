@@ -15,7 +15,7 @@ from splendor_duel_engine._core import observation as rust_observation
 
 from splendor_duel_engine.engine.actions import apply as py_apply
 from splendor_duel_engine.engine.actions import decide as py_decide
-from splendor_duel_engine.engine.observation import observation as py_observation
+from splendor_duel_engine.engine.observation import get_observation as py_observation
 from splendor_duel_engine.engine.state import GameState as PyGameState
 from tests.engine_rs.parity import (
     action_fingerprint,

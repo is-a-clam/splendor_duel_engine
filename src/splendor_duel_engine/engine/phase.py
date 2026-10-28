@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import enum
+from enum import Enum
 
 
-class Phase(enum.Enum):
+class Phase(Enum):
     USE_PRIVILEGES = "use_privileges"
     REPLENISH = "replenish"
     MANDATORY = "mandatory"

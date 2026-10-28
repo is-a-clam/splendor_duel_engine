@@ -291,16 +291,12 @@ class GreedyAgent:
         best = max(
             affordable, key=lambda card: card.points * _VALUE_WEIGHT + card.crowns
         )
-        # Gold is wild and never a card cost, so it is never "needed" as a
-        # color; pearls are never reduced by bonuses. One entry per missing
-        # token: the discard scoring counts this set.
+
         deficits = helpers.cost_deficits(best.cost, obs.you.bonus, obs.you.tokens)
-        nets = sorted(
-            (-count, colour.value, colour) for colour, count in deficits.items()
-        )
+        nets = sorted((-count, color) for color in Color if (count := helpers.get_tokens(deficits, color) > 0))
         needed: list[Color] = []
-        for neg_count, _, colour in nets:
-            needed.extend([colour] * -neg_count)
+        for neg_count, color in nets:
+            needed.extend([color] * -neg_count)
         return needed
 
     def _visible_cards(self, obs: Observation) -> list[Card]:
@@ -313,7 +309,7 @@ class GreedyAgent:
         return [
             card
             for card in self._visible_cards(obs)
-            if helpers.can_afford_card(card, obs.you.tokens, obs.you.bonus)
+            if helpers.can_afford_card(card, obs.you.bonus, obs.you.tokens)
         ]
 
     def _best_buy_action(self, buy_actions: list[BuyCard]) -> BuyCard:
@@ -336,10 +332,10 @@ class GreedyAgent:
         for index in action.line:
             color = obs.board[index]
             if color is not None:
-                hand = hand + Tokens(**{color.value: 1})
+                hand = helpers.add_tokens(hand, Tokens(**{color: 1}))
         return any(
             card.points > _HIGH_VALUE_POINTS
-            and helpers.can_afford_card(card, hand, obs.you.bonus)
+            and helpers.can_afford_card(card, obs.you.bonus, hand)
             for card in visible_cards
         )
 
@@ -354,7 +350,7 @@ class GreedyAgent:
                 for index in action.line
                 if (color := obs.board[index]) is not None
             ]
-            penalty = _PENALTY_COST if helpers.take_penalty(colors) else 0
+            penalty = _PENALTY_COST if helpers.is_penalty_triggered(colors) else 0
             needed_bonus = _NEEDED_COLOR_BONUS * sum(1 for c in colors if c in needed)
             total = len(colors) * _TOKEN_WEIGHT + needed_bonus - penalty
             return (total, action.line)
@@ -404,4 +400,4 @@ class GreedyAgent:
         counts = Counter(c for c in obs.board if c is not None and c != Color.GOLD)
         if not counts:
             return None
-        return min(counts, key=lambda c: (counts[c], c.value))
+        return min(counts, key=lambda c: (counts[c], c))

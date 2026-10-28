@@ -51,11 +51,11 @@ __all__ = [
     "decide",
     "helpers",
     "load_cards",
-    "observation",
+    "get_observation",
     "helpers",
 ]
 
-_BACKEND = os.environ.get("SPLENDOR_DUEL_ENGINE", "python").strip().lower()
+_BACKEND = os.environ.get("SPLENDOR_DUEL_ENGINE", "rust").strip().lower()
 
 if _BACKEND == "rust":
     from splendor_duel_engine.rust_engine import (
@@ -130,7 +130,7 @@ elif _BACKEND == "python":
     from splendor_duel_engine.engine.observation import (
         Observation,
         PlayerView,
-        observation,
+        get_observation,
     )
     from splendor_duel_engine.engine.phase import Phase
     from splendor_duel_engine.engine.state import (

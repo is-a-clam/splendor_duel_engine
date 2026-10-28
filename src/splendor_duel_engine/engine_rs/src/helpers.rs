@@ -17,10 +17,10 @@ pub const MAX_RESERVED: u32 = 3;
 pub const PRESTIGE_WIN: u32 = 20;
 /// Crowns win threshold (spec §End of turn and victory).
 pub const CROWNS_WIN: u32 = 10;
-/// Colour-based prestige win threshold (spec §End of turn and victory).
+/// color-based prestige win threshold (spec §End of turn and victory).
 pub const COLOR_WIN_POINTS: u32 = 10;
 
-/// Every colour in declaration order, matching Python's `tuple(Color)`.
+/// Every color in declaration order, matching Python's `tuple(Color)`.
 const ALL_COLORS: [Color; 7] = [
     Color::WHITE,
     Color::BLUE,
@@ -31,7 +31,7 @@ const ALL_COLORS: [Color; 7] = [
     Color::GOLD,
 ];
 
-/// Compute remaining cost after applying bonuses (min 0 per colour, pearls
+/// Compute remaining cost after applying bonuses (min 0 per color, pearls
 /// never reduced).
 ///
 /// Gold is never a card cost per the rules; it is only a wild payment token.
@@ -47,19 +47,19 @@ fn remaining_cost(cost: Tokens, bonus: Tokens) -> Tokens {
     }
 }
 
-/// Report missing tokens per colour after bonuses and payment.
+/// Report missing tokens per color after bonuses and payment.
 ///
-/// For each gem colour: `max(0, max(0, cost - bonus) - paid)`. Pearls are never
-/// reduced by a bonus. Gold is ignored entirely. Only colours with deficit > 0
+/// For each gem color: `max(0, max(0, cost - bonus) - paid)`. Pearls are never
+/// reduced by a bonus. Gold is ignored entirely. Only colors with deficit > 0
 /// are included, in `GEM_COLORS` order then pearl (the caller relies on that
 /// order for the Python dict).
 pub fn cost_deficits(cost: Tokens, bonus: Tokens, paid: Tokens) -> Vec<(Color, u8)> {
     let mut deficits = Vec::new();
-    for colour in GEM_COLORS {
-        let required = cost.count(colour).saturating_sub(bonus.count(colour));
-        let missing = required.saturating_sub(paid.count(colour));
+    for color in GEM_COLORS {
+        let required = cost.count(color).saturating_sub(bonus.count(color));
+        let missing = required.saturating_sub(paid.count(color));
         if missing > 0 {
-            deficits.push((colour, missing));
+            deficits.push((color, missing));
         }
     }
     let pearl_missing = cost.pearl.saturating_sub(paid.pearl);
@@ -73,9 +73,9 @@ pub fn cost_deficits(cost: Tokens, bonus: Tokens, paid: Tokens) -> Vec<(Color, u
 ///
 /// Gold is wild and covers any shortfall. The multicolor rule is folded into
 /// this answer: a multicolor card may not be bought unless the player holds a
-/// bonus token in some gem colour.
+/// bonus token in some gem color.
 pub fn can_afford_card(card: &Card, tokens: Tokens, bonus: Tokens) -> bool {
-    if card.is_multicolor && !GEM_COLORS.iter().any(|&colour| bonus.count(colour) > 0) {
+    if card.is_multicolor && !GEM_COLORS.iter().any(|&color| bonus.count(color) > 0) {
         return false;
     }
     let shortfall: u32 = cost_deficits(card.cost, bonus, tokens)
@@ -88,7 +88,7 @@ pub fn can_afford_card(card: &Card, tokens: Tokens, bonus: Tokens) -> bool {
 /// Enumerate legal payments for buying `card`, in the pinned loop order
 /// (white, blue, green, red, black, pearl).
 ///
-/// For each combination of coloured tokens and pearls the player may spend,
+/// For each combination of colored tokens and pearls the player may spend,
 /// only the minimum gold needed to cover that combination's shortfall is
 /// yielded. The result is empty exactly when [`can_afford_card`] is false.
 pub fn legal_payments(card: &Card, tokens: Tokens, bonus: Tokens) -> Vec<Tokens> {
@@ -144,14 +144,14 @@ pub fn legal_payments(card: &Card, tokens: Tokens, bonus: Tokens) -> Vec<Tokens>
         .collect()
 }
 
-/// Return true if taking these colours triggers a penalty.
+/// Return true if taking these colors triggers a penalty.
 ///
-/// True when any colour occurs three or more times, or when pearl occurs two
+/// True when any color occurs three or more times, or when pearl occurs two
 /// or more times.
 pub fn take_penalty(colors: &[Color]) -> bool {
-    for &colour in &ALL_COLORS {
-        let count = colors.iter().filter(|&&other| other == colour).count();
-        if colour == Color::PEARL {
+    for &color in &ALL_COLORS {
+        let count = colors.iter().filter(|&&other| other == color).count();
+        if color == Color::PEARL {
             if count >= 2 {
                 return true;
             }
@@ -162,11 +162,11 @@ pub fn take_penalty(colors: &[Color]) -> bool {
     false
 }
 
-/// Sum card points for purchased cards of effective colour `color`.
+/// Sum card points for purchased cards of effective color `color`.
 ///
-/// A multicolor card's effective colour is its `chosen_color`; any other
-/// card's is its printed `bonus`. Colourless cards contribute nothing. Card
-/// points only: bonus tokens are not points in a colour.
+/// A multicolor card's effective color is its `chosen_color`; any other
+/// card's is its printed `bonus`. colorless cards contribute nothing. Card
+/// points only: bonus tokens are not points in a color.
 pub fn color_points(purchased: &[PurchasedCard], color: Color) -> u32 {
     let mut points = 0;
     for purchased_card in purchased {
@@ -185,8 +185,8 @@ pub fn color_points(purchased: &[PurchasedCard], color: Color) -> u32 {
 
 /// Enumerate distinct discard subsets of `tokens` summing to `excess`.
 ///
-/// Any colours count, including gold and pearls. The order matches the Python
-/// recursion: `tuple(Color)` order, with each colour's take count descending.
+/// Any colors count, including gold and pearls. The order matches the Python
+/// recursion: `tuple(Color)` order, with each color's take count descending.
 pub fn discard_subsets(tokens: Tokens, excess: i64) -> Vec<Tokens> {
     let mut results = Vec::new();
     let mut seen: HashSet<[u8; 7]> = HashSet::new();
@@ -232,7 +232,7 @@ fn discard_recurse(
 /// Return true if the player may reserve: gold on the board and fewer than
 /// `MAX_RESERVED` reserved cards.
 pub fn can_reserve(board: &[Option<Color>], reserved_count: i64) -> bool {
-    let has_gold = board.iter().any(|&colour| colour == Some(Color::GOLD));
+    let has_gold = board.iter().any(|&color| color == Some(Color::GOLD));
     has_gold && reserved_count < i64::from(MAX_RESERVED)
 }
 
@@ -258,12 +258,12 @@ pub fn visible_cards(
 }
 
 /// Return true if this player meets any win condition: 20 prestige, 10 crowns,
-/// or 10 card points in a single gem colour.
+/// or 10 card points in a single gem color.
 pub fn is_winner(player: &PlayerState) -> bool {
     if player.prestige >= PRESTIGE_WIN || player.crowns >= CROWNS_WIN {
         return true;
     }
     GEM_COLORS
         .iter()
-        .any(|&colour| color_points(&player.purchased, colour) >= COLOR_WIN_POINTS)
+        .any(|&color| color_points(&player.purchased, color) >= COLOR_WIN_POINTS)
 }

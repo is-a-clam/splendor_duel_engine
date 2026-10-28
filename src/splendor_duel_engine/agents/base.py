@@ -14,7 +14,7 @@ from splendor_duel_engine.engine_api import (
     TakeTokens,
     apply,
     decide,
-    observation,
+    get_observation,
 )
 
 A = TypeVar("A")
@@ -102,7 +102,7 @@ def play_game_from_state(
     turn_count = 0
     while state.winner is None:
         player = state.current_player
-        obs = observation(state, player)
+        obs = get_observation(state, player)
         dp = decide(state)
         action = agents[player].choose_action(obs, dp.legal_actions)
         state = apply(state, action)

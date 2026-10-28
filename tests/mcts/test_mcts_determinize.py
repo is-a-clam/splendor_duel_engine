@@ -14,7 +14,7 @@ from splendor_duel_engine.engine.actions import (
     apply,
 )
 from splendor_duel_engine.engine.colors import Color
-from splendor_duel_engine.engine.observation import Observation, observation
+from splendor_duel_engine.engine.observation import Observation, get_observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import GameState
 from splendor_duel_engine.mcts.mcts_determinize import determinize
@@ -196,7 +196,7 @@ def _make_midgame_state_with_purchases():
 
 def test_determinize_preserves_public_info():
     state = GameState.new_game(0)
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     rng = random.Random(42)
     det_state = determinize(obs, rng)
     # Public info must match exactly
@@ -215,7 +215,7 @@ def test_determinize_samples_opponent_reserve_hidden():
     # Construct state where opponent has face-down reserved cards
     # Determinization must assign concrete cards from appropriate decks
     state = _make_state_with_opponent_reserved()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det1 = determinize(obs, random.Random(1))
     det2 = determinize(obs, random.Random(2))
     # Different seeds -> different face-down cards (usually)
@@ -224,7 +224,7 @@ def test_determinize_samples_opponent_reserve_hidden():
 
 def test_determinize_samples_deck_order():
     state = GameState.new_game(0)
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det1 = determinize(obs, random.Random(1))
     det2 = determinize(obs, random.Random(2))
     # Deck order should differ with different seeds
@@ -233,7 +233,7 @@ def test_determinize_samples_deck_order():
 
 def test_determinize_copies_the_observation_bag():
     state = GameState.new_game(0)
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det = determinize(obs, random.Random(42))
     assert det.bag == obs.bag
 
@@ -241,7 +241,7 @@ def test_determinize_copies_the_observation_bag():
 def test_determinize_your_reserved_deck_excluded_from_decks():
     """Your hidden reserves (your_reserved_deck) must not appear in sampled decks."""
     state = _make_state_with_your_reserved_deck()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     # Run many determinizations to catch any leakage
     for seed in range(50):
         det = determinize(obs, random.Random(seed))
@@ -257,7 +257,7 @@ def test_determinize_your_reserved_deck_excluded_from_decks():
 def test_determinize_your_reserved_deck_excluded_from_opponent_reserves():
     """Your hidden reserves must reduce opponent's hidden reserve pool."""
     state = _make_state_with_your_reserved_deck()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     # Opponent may have 0 hidden reserves, but if they do, your hidden reserves
     # should not be sampled for them
     for seed in range(50):
@@ -273,7 +273,7 @@ def test_determinize_your_reserved_deck_excluded_from_opponent_reserves():
 def test_determinize_rng_seeded():
     """Different determinization seeds produce different RNG states."""
     state = GameState.new_game(0)
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det1 = determinize(obs, random.Random(1))
     det2 = determinize(obs, random.Random(2))
     # Same public state, different RNG
@@ -291,7 +291,7 @@ def test_determinize_replenish_deterministic_per_root():
     from dataclasses import replace
 
     state = replace(state, phase=Phase.REPLENISH)
-    obs = observation(state, state.current_player)
+    obs = get_observation(state, state.current_player)
     det = determinize(obs, random.Random(42))
 
     # Replenish should be legal (bag non-empty, phase REPLENISH)
@@ -326,28 +326,28 @@ def test_determinize_invariant_check():
 
     # Test on initial state
     state = GameState.new_game(0)
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     for seed in range(20):
         det = determinize(obs, random.Random(seed))
         _verify_card_invariant(obs, det)
 
     # Test on state with opponent reserved
     state = _make_state_with_opponent_reserved()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     for seed in range(20):
         det = determinize(obs, random.Random(seed))
         _verify_card_invariant(obs, det)
 
     # Test on state with your reserved deck
     state = _make_state_with_your_reserved_deck()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     for seed in range(20):
         det = determinize(obs, random.Random(seed))
         _verify_card_invariant(obs, det)
 
     # Test on mid-game state with purchases
     state = _make_midgame_state_with_purchases()
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     for seed in range(20):
         det = determinize(obs, random.Random(seed))
         _verify_card_invariant(obs, det)
@@ -389,7 +389,7 @@ def test_determinize_invariant_check():
                     break
             else:
                 break
-        obs = observation(state, state.current_player)
+        obs = get_observation(state, state.current_player)
         for seed in range(10):
             det = determinize(obs, random.Random(seed))
             _verify_card_invariant(obs, det)

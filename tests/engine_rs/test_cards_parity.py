@@ -50,7 +50,7 @@ def test_level_census_matches() -> None:
         )
 
 
-def test_colour_and_phase_members_match_the_python_enums() -> None:
+def test_color_and_phase_members_match_the_python_enums() -> None:
     from splendor_duel_engine._core import Ability, Color, Phase
 
     from splendor_duel_engine.engine.cards import Ability as PyAbility

@@ -7,33 +7,30 @@ over state *fragments* so a caller can ask about a hypothetical hand.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from itertools import product, combinations
 from typing import TYPE_CHECKING
 
-from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
+from splendor_duel_engine.engine.colors import GEM_COLORS, PAY_COLORS, ALL_COLORS, Tokens, Color
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from splendor_duel_engine.engine.cards import Card
     from splendor_duel_engine.engine.state import PlayerState, PurchasedCard
 
-#: Token limit at end of turn (spec §End of turn and victory).
+
 TOKEN_LIMIT: int = 10
-#: Maximum reserved cards (spec §Privileges).
 MAX_RESERVED: int = 3
-#: Prestige win threshold (spec §End of turn and victory).
 PRESTIGE_WIN: int = 20
-#: Crowns win threshold (spec §End of turn and victory).
 CROWNS_WIN: int = 10
-#: Color-based prestige win threshold (spec §End of turn and victory).
 COLOR_WIN_POINTS: int = 10
 
 
-def count(tokens: Tokens, color: Color) -> int:
+def get_tokens(tokens: Tokens, color: Color) -> int:
     """Return the number of tokens of ``color`` in ``tokens``."""
-    return getattr(tokens, color.name.lower())
+    return getattr(tokens, color.value.lower())
 
 
-def total(tokens: Tokens) -> int:
+def total_tokens(tokens: Tokens) -> int:
     """Return the total number of tokens in ``tokens``."""
     return (
         tokens.white + tokens.blue + tokens.green + tokens.red +
@@ -41,7 +38,7 @@ def total(tokens: Tokens) -> int:
     )
 
 
-def add(t1: Tokens, t2: Tokens) -> Tokens:
+def add_tokens(t1: Tokens, t2: Tokens) -> Tokens:
     """Return the sum of two Tokens."""
     return Tokens(
         white=t1.white + t2.white,
@@ -54,7 +51,7 @@ def add(t1: Tokens, t2: Tokens) -> Tokens:
     )
 
 
-def sub(t1: Tokens, t2: Tokens) -> Tokens:
+def sub_tokens(t1: Tokens, t2: Tokens) -> Tokens:
     """Return the difference of two Tokens (t1 - t2)."""
     return Tokens(
         white=t1.white - t2.white,
@@ -68,137 +65,76 @@ def sub(t1: Tokens, t2: Tokens) -> Tokens:
 
 
 def _remaining_cost(cost: Tokens, bonus: Tokens) -> Tokens:
-    """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced).
-
-    Gold is never a card cost per the rules; it is only a wild payment token.
-    """
+    """Compute remaining cost after applying bonuses (min 0 per color, pearls never reduced)."""
     return Tokens(
         white=max(0, cost.white - bonus.white),
         blue=max(0, cost.blue - bonus.blue),
         green=max(0, cost.green - bonus.green),
         red=max(0, cost.red - bonus.red),
         black=max(0, cost.black - bonus.black),
-        pearl=cost.pearl,  # pearls never reduced
-        gold=0,  # gold is never a card cost
+        pearl=max(0, cost.pearl - bonus.pearl),
+        gold=0,
     )
 
 
-def cost_deficits(cost: Tokens, bonus: Tokens, paid: Tokens) -> dict[Color, int]:
-    """Report missing tokens per colour after bonuses and payment.
-
-    For each gem colour: max(0, max(0, cost - bonus) - paid). Pearls are never
-    reduced by a bonus. Gold is ignored entirely (gold is never a card cost).
-    Only colours with deficit > 0 are included. Ordered as GEM_COLORS then pearl.
-    """
-    deficits: dict[Color, int] = {}
-    for colour in GEM_COLORS:
-        missing = max(
-            0, max(0, count(cost, colour) - count(bonus, colour)) - count(paid, colour)
-        )
-        if missing > 0:
-            deficits[colour] = missing
-    pearl_missing = max(0, cost.pearl - paid.pearl)
-    if pearl_missing > 0:
-        deficits[Color.PEARL] = pearl_missing
+def cost_deficits(cost: Tokens, bonus: Tokens, tokens: Tokens) -> Tokens:
+    """Report missing tokens per color after bonuses and payment."""
+    remaining = _remaining_cost(cost, bonus)
+    deficits = _remaining_cost(remaining, tokens)
     return deficits
 
 
-def can_afford_card(card: Card, tokens: Tokens, bonus: Tokens) -> bool:
+def can_afford_card(card: Card, bonus: Tokens, tokens: Tokens) -> bool:
     """Return whether the player may buy this card right now.
 
-    Gold is wild and covers any shortfall. The multicolor rule is folded into
-    this answer: a multicolor card may not be bought unless the player holds a
-    bonus token in some gem colour. Pearls are never discounted by a bonus.
-    This is the single affordability question for "may this player buy this
-    card right now".
+    A multicolor card may not be bought unless the player holds a bonus token
+    in some gem color.
     """
-    if card.is_multicolor and not any(count(bonus, colour) > 0 for colour in GEM_COLORS):
+    if card.is_multicolor and not any(get_tokens(bonus, color) > 0 for color in GEM_COLORS):
         return False
     deficits = cost_deficits(card.cost, bonus, tokens)
-    shortfall = sum(deficits.values())
+    shortfall = total_tokens(deficits)
     return shortfall <= tokens.gold
 
 
-def legal_payments(card: Card, tokens: Tokens, bonus: Tokens) -> list[Tokens]:
+def legal_payments(card: Card, bonus: Tokens, tokens: Tokens) -> list[Tokens]:
     """Enumerate legal payments for buying ``card``.
 
-    Returns every legal way to pay for ``card``. For each combination of
-    coloured tokens and pearls the player may spend, only the *minimum* gold
-    needed to cover that combination's shortfall is yielded. The shortfall of
-    a combination is taken from :func:`cost_deficits` -- the same public rule
-    :func:`can_afford_card` uses -- so the gate and the enumeration can never
-    disagree about what a colour is short.
-
-    Spending gold beyond the shortfall is redundant rather than illegal:
-    ``apply()`` accepts excess gold, but the enumeration never proposes it,
-    because the extra gold buys nothing.
-
-    The result is empty exactly when :func:`can_afford_card` is false, so
-    ``decide()`` and ``apply()`` agree: a payment is offered exactly when it
-    would be accepted.
-
+    Returns every legal way to pay for ``card``.
+    The result is empty exactly when :func:`can_afford_card` is false.
     The enumeration order is the white, blue, green, red, black, pearl loop
     order.
     """
-    if not can_afford_card(card, tokens, bonus):
-        return []
     remaining = _remaining_cost(card.cost, bonus)
-    legal: list[Tokens] = []
+    deficits = _remaining_cost(remaining, tokens)
+    total_gold_required = total_tokens(deficits)
 
-    for w in range(min(tokens.white, remaining.white) + 1):
-        for b in range(min(tokens.blue, remaining.blue) + 1):
-            for g in range(min(tokens.green, remaining.green) + 1):
-                for r in range(min(tokens.red, remaining.red) + 1):
-                    for bl in range(min(tokens.black, remaining.black) + 1):
-                        for p in range(min(tokens.pearl, remaining.pearl) + 1):
-                            paid = Tokens(
-                                white=w,
-                                blue=b,
-                                green=g,
-                                red=r,
-                                black=bl,
-                                pearl=p,
-                            )
-                            # One definition of the shortfall rule: cost_deficits.
-                            deficit = sum(
-                                cost_deficits(card.cost, bonus, paid).values()
-                            )
-                            if deficit <= tokens.gold:
-                                legal.append(
-                                    Tokens(
-                                        white=w,
-                                        blue=b,
-                                        green=g,
-                                        red=r,
-                                        black=bl,
-                                        pearl=p,
-                                        gold=deficit,
-                                    )
-                                )
+    if total_gold_required > tokens.gold:
+        return []
 
-    # Deduplicate if necessary (enumeration shouldn't produce duplicates)
-    unique = []
-    seen = set()
-    for payment in legal:
-        key = (
-            payment.white,
-            payment.blue,
-            payment.green,
-            payment.red,
-            payment.black,
-            payment.pearl,
-            payment.gold,
-        )
-        if key not in seen:
-            seen.add(key)
-            unique.append(payment)
-    return unique
+    gold_ranges: list[range] = []
+    for color in PAY_COLORS:
+        required_gold = get_tokens(deficits, color)
+        extra_gold = tokens.gold - total_gold_required
+        color_cost = get_tokens(remaining, color)
+        gold_range = range(required_gold, min(required_gold + extra_gold, color_cost) + 1)
+        gold_ranges.append(gold_range)
 
+    return [
+        Tokens(**({
+            color.value: get_tokens(remaining, color) - substitution
+            for color, substitution, in zip(PAY_COLORS, substitutions)
+        } | {
+            color.GOLD.value: sum(substitutions)
+        }))
+        for substitutions in product(*gold_ranges)
+        if sum(substitutions) <= tokens.gold
+    ]
 
-def take_penalty(colors: Iterable[Color]) -> bool:
-    """Return True if taking these colours triggers a penalty.
+def is_penalty_triggered(colors: Iterable[Color]) -> bool:
+    """Return True if taking these colors triggers a penalty.
 
-    True when any colour appears three or more times, or when pearl appears
+    True when any color appears three or more times, or when pearl appears
     two or more times.
     """
     counts: dict[Color, int] = {}
@@ -215,13 +151,7 @@ def take_penalty(colors: Iterable[Color]) -> bool:
 
 
 def color_points(purchased: Iterable[PurchasedCard], color: Color) -> int:
-    """Sum card points for purchased cards of effective colour ``color``.
-
-    For a multicolor card the effective colour is ``purchased_card.chosen_color``,
-    for any other card it is ``card.bonus``. Cards with ``bonus is None``
-    (colourless) contribute nothing. Card points only: bonus tokens are not
-    points in a colour.
-    """
+    """Sum card points for purchased cards of effective color ``color``."""
     points = 0
     for purchased_card in purchased:
         card = purchased_card.card
@@ -235,34 +165,12 @@ def color_points(purchased: Iterable[PurchasedCard], color: Color) -> int:
 
 
 def discard_subsets(tokens: Tokens, excess: int) -> list[Tokens]:
-    """Enumerate distinct discard subsets of ``tokens`` summing to ``excess``.
-
-    Any colours count, including gold and pearls. The result excludes the
-    empty subset (``excess`` is always >= 1 when called) and is deduplicated.
-    """
-    colors = tuple(Color)
-    results: list[Tokens] = []
-    seen: set[tuple[int, ...]] = set()
-
-    def recurse(idx: int, counts: list[int], remaining: int) -> None:
-        if remaining == 0:
-            key = tuple(counts)
-            if key not in seen:
-                seen.add(key)
-                results.append(Tokens(**{c.value: n for c, n in zip(colors, counts)}))
-            return
-        if idx == len(colors):
-            return
-        color = colors[idx]
-        held = count(tokens, color)
-        # Greedily cap this colour, but never below what the rest can absorb.
-        for take in range(min(held, remaining), -1, -1):
-            counts[idx] = take
-            recurse(idx + 1, counts, remaining - take)
-        counts[idx] = 0
-
-    recurse(0, [0] * len(colors), excess)
-    return results
+    """Enumerate distinct discard subsets of ``tokens`` summing to ``excess``."""
+    token_list: list[Color] = []
+    for color in ALL_COLORS:
+        token_list.extend([color] * get_tokens(tokens, color))
+    subsets = combinations(token_list, excess)
+    return [Tokens(**{token.value: subset.count(token) for token in set(subset)}) for subset in subsets]
 
 
 def can_reserve(board: tuple[Color | None, ...], reserved_count: int) -> bool:
@@ -270,7 +178,7 @@ def can_reserve(board: tuple[Color | None, ...], reserved_count: int) -> bool:
 
     Requires gold on board and fewer than MAX_RESERVED reserved cards.
     """
-    has_gold = any(colour == Color.GOLD for colour in board)
+    has_gold = any(color == Color.GOLD for color in board)
     return has_gold and reserved_count < MAX_RESERVED
 
 
@@ -282,8 +190,7 @@ def visible_cards(
     """Return all visible cards in contract order.
 
     Order is pyramid row order (skipping None slots), then own public
-    reservations, then own hidden deck reservations. This order is part of the
-    contract.
+    reservations, then own hidden deck reservations.
     """
     result: list[Card] = []
     for row in pyramid:

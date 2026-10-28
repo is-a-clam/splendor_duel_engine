@@ -6,11 +6,11 @@ Spec: docs/specs/splendor-duel-rules.md — "Components and setup" (25 tokens:
 
 from __future__ import annotations
 
-import enum
 from dataclasses import dataclass
+from enum import Enum
 
 
-class Color(str, enum.Enum):
+class Color(Enum):
     """A token and bonus color; values match the keys in ``cards.json``."""
 
     WHITE = "white"
@@ -22,7 +22,6 @@ class Color(str, enum.Enum):
     GOLD = "gold"
 
 
-#: The five gem colors. Pearls and gold are tokens but never card bonuses.
 GEM_COLORS: tuple[Color, ...] = (
     Color.WHITE,
     Color.BLUE,
@@ -30,16 +29,8 @@ GEM_COLORS: tuple[Color, ...] = (
     Color.RED,
     Color.BLACK,
 )
-
-_TOKEN_FIELDS: tuple[str, ...] = (
-    "white",
-    "blue",
-    "green",
-    "red",
-    "black",
-    "pearl",
-    "gold",
-)
+PAY_COLORS: tuple[Color, ...] = GEM_COLORS + (Color.PEARL,)
+ALL_COLORS: tuple[Color, ...] = PAY_COLORS + (Color.GOLD,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,25 +44,3 @@ class Tokens:
     black: int = 0
     pearl: int = 0
     gold: int = 0
-
-    def count(self, color: Color) -> int:
-        """Return how many tokens of ``color`` are held."""
-        from splendor_duel_engine.engine.helpers import count
-        return count(self, color)
-
-    def total(self) -> int:
-        """Return the total number of tokens held across all colors."""
-        from splendor_duel_engine.engine.helpers import total
-        return total(self)
-
-    def __add__(self, other: Tokens) -> Tokens:
-        if not isinstance(other, Tokens):
-            return NotImplemented
-        from splendor_duel_engine.engine.helpers import add
-        return add(self, other)
-
-    def __sub__(self, other: Tokens) -> Tokens:
-        if not isinstance(other, Tokens):
-            return NotImplemented
-        from splendor_duel_engine.engine.helpers import sub
-        return sub(self, other)

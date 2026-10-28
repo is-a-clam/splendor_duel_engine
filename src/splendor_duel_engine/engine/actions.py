@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import copy
-import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from splendor_duel_engine.engine import helpers
 from splendor_duel_engine.engine.board import SPIRAL
+
+
 from splendor_duel_engine.engine.cards import Ability, Card
 from splendor_duel_engine.engine.colors import GEM_COLORS, Color, Tokens
 from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import (
-    GameState,
-    PurchasedCard,
-    ReservedCard,
-)
+from splendor_duel_engine.engine.state import GameState, PurchasedCard, ReservedCard
+
 
 _BOARD_SIZE = 25
 _DIRECTIONS_8 = (
@@ -150,7 +148,7 @@ def decide(state: GameState) -> DecisionPoint:
 
     if state.phase == Phase.REPLENISH:
         actions: list[Action] = []
-        if helpers.total(state.bag) > 0:
+        if helpers.total_tokens(state.bag) > 0:
             actions.append(Replenish())
         actions.append(DoneWithReplenish())
         return DecisionPoint(phase=Phase.REPLENISH, legal_actions=tuple(actions))
@@ -176,7 +174,7 @@ def decide(state: GameState) -> DecisionPoint:
 
         # Forced replenish: if no legal take actions and bag non-empty, go to REPLENISH
         # But only if no reserve/buy actions either
-        if not actions and helpers.total(state.bag) > 0:
+        if not actions and helpers.total_tokens(state.bag) > 0:
             return DecisionPoint(phase=Phase.REPLENISH, legal_actions=(Replenish(),))
 
         actions.sort(
@@ -192,7 +190,7 @@ def decide(state: GameState) -> DecisionPoint:
             return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=())
         ap = state.players[state.current_player]
         bonus = ap.bonus
-        legal_payments = helpers.legal_payments(pending_action.card, ap.tokens, bonus)
+        legal_payments = helpers.legal_payments(pending_action.card, bonus, ap.tokens)
         actions: list[Action] = [PayTokens(payment=p) for p in legal_payments]
         return DecisionPoint(phase=Phase.CHOOSE_PAYMENT, legal_actions=tuple(actions))
 
@@ -201,7 +199,7 @@ def decide(state: GameState) -> DecisionPoint:
         if pending_action is None:
             return DecisionPoint(phase=Phase.MULTICOLOR_COLOR, legal_actions=())
         ap = state.players[state.current_player]
-        available_colors = [c for c in GEM_COLORS if helpers.count(ap.bonus, c) > 0]
+        available_colors = [c for c in GEM_COLORS if helpers.get_tokens(ap.bonus, c) > 0]
         actions: list[Action] = [ChooseMulticolor(color=c) for c in available_colors]
         return DecisionPoint(phase=Phase.MULTICOLOR_COLOR, legal_actions=tuple(actions))
 
@@ -210,7 +208,7 @@ def decide(state: GameState) -> DecisionPoint:
             return DecisionPoint(phase=Phase.STEAL_TOKEN, legal_actions=())
         opp = 1 - state.current_player
         opp_tokens = state.players[opp].tokens
-        stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
+        stealable_colors = [c for c in GEM_COLORS if helpers.get_tokens(opp_tokens, c) > 0]
         actions: list[Action] = [ChooseStealToken(color=c) for c in stealable_colors]
         return DecisionPoint(phase=Phase.STEAL_TOKEN, legal_actions=tuple(actions))
 
@@ -244,7 +242,7 @@ def decide(state: GameState) -> DecisionPoint:
 
     if state.phase == Phase.DISCARD:
         ap = state.players[state.current_player]
-        excess = helpers.total(ap.tokens) - helpers.TOKEN_LIMIT
+        excess = helpers.total_tokens(ap.tokens) - helpers.TOKEN_LIMIT
         actions: list[Action] = [
             DiscardTokens(tokens=subset)
             for subset in helpers.discard_subsets(ap.tokens, excess)
@@ -263,14 +261,14 @@ def apply(state: GameState, action: Action) -> GameState:
         return _apply_use_privilege(state, action.index)
     if isinstance(action, DoneWithPrivileges):
         # Advance to REPLENISH
-        return dataclasses.replace(state, phase=Phase.REPLENISH)
+        return replace(state, phase=Phase.REPLENISH)
     if isinstance(action, Replenish):
         return _apply_replenish(state)
     if isinstance(action, DoneWithReplenish):
         # If extra_turn flag is set, consume it and stay with same player
         if state.extra_turn:
-            return dataclasses.replace(state, phase=Phase.MANDATORY, extra_turn=False)
-        return dataclasses.replace(state, phase=Phase.MANDATORY)
+            return replace(state, phase=Phase.MANDATORY, extra_turn=False)
+        return replace(state, phase=Phase.MANDATORY)
     if isinstance(action, TakeTokens):
         return _apply_take_tokens(state, action.line)
     if isinstance(action, ReserveCard):
@@ -405,7 +403,7 @@ def _get_buyable_cards(state: GameState) -> list[BuyCard]:
     # Own reserved cards (checked first, so they take precedence)
     for reserved in ap.reserved:
         card = reserved.card
-        if helpers.can_afford_card(card, ap.tokens, bonus):
+        if helpers.can_afford_card(card, bonus, ap.tokens):
             buyable[card.id] = (card, "reserved")
 
     # Pyramid cards
@@ -414,7 +412,7 @@ def _get_buyable_cards(state: GameState) -> list[BuyCard]:
             if (
                 card is not None
                 and card.id not in buyable
-                and helpers.can_afford_card(card, ap.tokens, bonus)
+                and helpers.can_afford_card(card, bonus, ap.tokens)
             ):
                 source = f"pyramid_{row_idx}_{col_idx}"
                 buyable[card.id] = (card, source)
@@ -445,15 +443,15 @@ def _apply_use_privilege(state: GameState, index: int) -> GameState:
 
     # Add token to player's hand
     taken_tokens = Tokens(**{color.value: 1})
-    new_ap = dataclasses.replace(
-        ap, tokens=helpers.add(ap.tokens, taken_tokens), privileges=ap.privileges - 1
+    new_ap = replace(
+        ap, tokens=helpers.add_tokens(ap.tokens, taken_tokens), privileges=ap.privileges - 1
     )
 
     # Determine next phase: stay in USE_PRIVILEGES if more privileges, else REPLENISH
     next_phase = Phase.USE_PRIVILEGES if new_ap.privileges > 0 else Phase.REPLENISH
 
-    return dataclasses.replace(
-        state.replace_player(active, new_ap),
+    return replace(
+        state.update_player(active, new_ap),
         current_player=active,
         phase=next_phase,
     )
@@ -466,7 +464,7 @@ def _apply_replenish(state: GameState) -> GameState:
     # Collect all tokens from bag into a list
     token_colors: list[Color] = []
     for color in Color:
-        count = helpers.count(state.bag, color)
+        count = helpers.get_tokens(state.bag, color)
         token_colors.extend([color] * count)
 
     # Shuffle the tokens with a *copy* of the state's RNG. ``apply`` must never
@@ -486,12 +484,12 @@ def _apply_replenish(state: GameState) -> GameState:
         state = state.update_board(empty_indices[i], token_colors[i])
 
     # New bag is empty (all tokens placed since total = 25)
-    state = dataclasses.replace(state, bag=Tokens())
+    state = replace(state, bag=Tokens())
 
     # Grant opponent 1 privilege
     state = state.grant_privilege(opp)
 
-    return dataclasses.replace(
+    return replace(
         state,
         current_player=active,
         phase=Phase.MANDATORY,
@@ -522,10 +520,10 @@ def _apply_take_tokens(state: GameState, line: tuple[int, ...]) -> GameState:
         pearl=sum(1 for c in taken_colors if c == Color.PEARL),
         gold=sum(1 for c in taken_colors if c == Color.GOLD),
     )
-    new_ap = dataclasses.replace(ap, tokens=helpers.add(ap.tokens, taken_tokens))
-    state = state.replace_player(active, new_ap)
+    new_ap = replace(ap, tokens=helpers.add_tokens(ap.tokens, taken_tokens))
+    state = state.update_player(active, new_ap)
 
-    if helpers.take_penalty(taken_colors):
+    if helpers.is_penalty_triggered(taken_colors):
         opp = 1 - active
         state = state.grant_privilege(opp)
 
@@ -559,7 +557,7 @@ def _apply_reserve_card(state: GameState, action: ReserveCard) -> GameState:
     else:
         raise ValueError(f"unknown reserve source: {action.source}")
 
-    return dataclasses.replace(
+    return replace(
         state,
         pending_reserve=action,
         phase=Phase.CHOOSE_GOLD,
@@ -586,8 +584,8 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
 
     # Add gold to player's hand
     gold_tokens = Tokens(gold=1)
-    new_ap = dataclasses.replace(ap, tokens=helpers.add(ap.tokens, gold_tokens))
-    state = state.replace_player(active, new_ap)
+    new_ap = replace(ap, tokens=helpers.add_tokens(ap.tokens, gold_tokens))
+    state = state.update_player(active, new_ap)
 
     # Extract card from source and update pyramid/decks in one unified logic
     card: Card | None
@@ -612,13 +610,13 @@ def _apply_choose_gold(state: GameState, index: int) -> GameState:
 
     # Add card to player's reserved
     reserved_card = ReservedCard(card=card, from_deck=from_deck)
-    new_ap = dataclasses.replace(new_ap, reserved=new_ap.reserved + (reserved_card,))
-    state = state.replace_player(active, new_ap)
+    new_ap = replace(new_ap, reserved=new_ap.reserved + (reserved_card,))
+    state = state.update_player(active, new_ap)
 
     # Reserving takes a gold token, so route through the end-of-turn sequence
     # (discard/win) before the turn passes to the opponent.
     return _end_of_turn(
-        dataclasses.replace(state, pending_reserve=None), active, extra_turn=False
+        replace(state, pending_reserve=None), active, extra_turn=False
     )
 
 
@@ -657,10 +655,10 @@ def _apply_buy_card(state: GameState, action: BuyCard) -> GameState:
         raise ValueError(f"unknown buy source: {source}")
 
     # Verify affordability (the multicolor rule is folded into can_afford_card)
-    if not helpers.can_afford_card(card, ap.tokens, bonus):
+    if not helpers.can_afford_card(card, bonus, ap.tokens):
         raise ValueError("cannot afford card")
 
-    return dataclasses.replace(
+    return replace(
         state,
         pending_buy=action,
         phase=Phase.CHOOSE_PAYMENT,
@@ -680,19 +678,19 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
 
     # Validate payment
     bonus = ap.bonus
-    if not helpers.can_afford_card(card, action.payment, bonus):
+    if not helpers.can_afford_card(card, bonus, action.payment):
         raise ValueError("insufficient payment")
     # Also verify payment doesn't exceed player's tokens
     for color in Color:
-        if helpers.count(action.payment, color) > helpers.count(ap.tokens, color):
+        if helpers.get_tokens(action.payment, color) > helpers.get_tokens(ap.tokens, color):
             raise ValueError(f"payment exceeds tokens for {color}")
 
     # Move spent tokens to bag (use helper)
     state = state.add_to_bag(action.payment)
 
     # Remove tokens from player
-    new_tokens = helpers.sub(ap.tokens, action.payment)
-    new_ap = dataclasses.replace(ap, tokens=new_tokens)
+    new_tokens = helpers.sub_tokens(ap.tokens, action.payment)
+    new_ap = replace(ap, tokens=new_tokens)
 
     # Remove card from source and update pyramid/decks
     if source == "reserved":
@@ -700,7 +698,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
         for i, reserved in enumerate(ap.reserved):
             if reserved.card.id == card.id:
                 new_reserved = ap.reserved[:i] + ap.reserved[i + 1 :]
-                new_ap = dataclasses.replace(new_ap, reserved=new_reserved)
+                new_ap = replace(new_ap, reserved=new_reserved)
                 break
     elif source.startswith("pyramid_"):
         parts = source.split("_")
@@ -718,15 +716,16 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     # Add card to purchased
     purchased_card = PurchasedCard(card=card, chosen_color=None)
     new_purchased = new_ap.purchased + (purchased_card,)
-    new_ap = dataclasses.replace(new_ap, purchased=new_purchased)
+    new_ap = replace(new_ap, purchased=new_purchased)
 
     # Grant bonus, prestige, crowns
     old_crowns = new_ap.crowns
     if card.bonus is not None:
         bonus_increment = Tokens(**{card.bonus.value: 1})
-        new_bonus = bonus + bonus_increment
-        new_ap = dataclasses.replace(new_ap, bonus=new_bonus)
-    new_ap = dataclasses.replace(
+        new_bonus = helpers.add_tokens(bonus, bonus_increment)
+        new_ap = replace(new_ap, bonus=new_bonus)
+
+    new_ap = replace(
         new_ap,
         prestige=new_ap.prestige + card.points,
         crowns=new_ap.crowns + card.crowns,
@@ -734,15 +733,15 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
     new_crowns = new_ap.crowns
 
     # Update player state
-    state = state.replace_player(active, new_ap)
+    state = state.update_player(active, new_ap)
 
     # Royal trigger: crossing the 3rd or 6th crown threshold (from below) grants
     # one royal pick each. A multicolor card cannot pick its royal yet — the
-    # colour choice comes first — so defer via pending_royal.
+    # color choice comes first — so defer via pending_royal.
     crossed_royal = old_crowns < 3 <= new_crowns or old_crowns < 6 <= new_crowns
 
     if crossed_royal and state.royals_available:
-        royal_phase_state = dataclasses.replace(
+        royal_phase_state = replace(
             state,
             pending_buy=pending_action,
             winner=None,
@@ -752,7 +751,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
             pending_ability=None,
         )
         if card.is_multicolor:
-            return dataclasses.replace(
+            return replace(
                 royal_phase_state,
                 phase=Phase.MULTICOLOR_COLOR,
                 pending_royal=True,
@@ -761,7 +760,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
 
     # Handle multicolor first (separate from abilities)
     if card.is_multicolor:
-        return dataclasses.replace(
+        return replace(
             state,
             pending_buy=pending_action,
             winner=None,
@@ -773,7 +772,7 @@ def _apply_pay_tokens(state: GameState, action: PayTokens) -> GameState:
 
     # Not multicolor: resolve abilities directly
     return _resolve_abilities(
-        dataclasses.replace(
+        replace(
             state,
             pending_buy=pending_action,
             winner=None,
@@ -793,9 +792,9 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
         case Ability.STEAL_TOKEN:
             opp = 1 - active
             opp_tokens = state.players[opp].tokens
-            stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
+            stealable_colors = [c for c in GEM_COLORS if helpers.get_tokens(opp_tokens, c) > 0]
             if stealable_colors:
-                return dataclasses.replace(
+                return replace(
                     state,
                     phase=Phase.STEAL_TOKEN,
                     pending_ability=Ability.STEAL_TOKEN,
@@ -810,18 +809,18 @@ def _resolve_abilities(state: GameState, card: Card, active: int) -> GameState:
         case Ability.PRIVILEGE:
             # Clear pending_buy as this ability completes immediately
             return _run_privilege(
-                dataclasses.replace(state, pending_buy=None), card, active
+                replace(state, pending_buy=None), card, active
             )
 
         case Ability.EXTRA_TURN:
             # Clear pending_buy as this ability completes immediately
             return _run_extra_turn(
-                dataclasses.replace(state, pending_buy=None), card, active
+                replace(state, pending_buy=None), card, active
             )
 
         case None:
             # Clear pending_buy as no ability
-            return _end_of_turn(dataclasses.replace(state, pending_buy=None), active)
+            return _end_of_turn(replace(state, pending_buy=None), active)
 
 
 def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameState:
@@ -832,7 +831,7 @@ def _run_take_matching_token(state: GameState, card: Card, active: int) -> GameS
         ]
         if matching_indices:
             # Keep pending_buy for the decision phase
-            return dataclasses.replace(
+            return replace(
                 state,
                 phase=Phase.TAKE_MATCHING_TOKEN,
                 pending_ability=Ability.TAKE_MATCHING_TOKEN,
@@ -857,20 +856,20 @@ def _apply_discard_tokens(state: GameState, tokens: Tokens) -> GameState:
     """Move chosen excess tokens from the active player's hand to the bag."""
     active = state.current_player
     ap = state.players[active]
-    excess = helpers.total(ap.tokens) - helpers.TOKEN_LIMIT
+    excess = helpers.total_tokens(ap.tokens) - helpers.TOKEN_LIMIT
 
     for color in Color:
-        if helpers.count(tokens, color) < 0:
+        if helpers.get_tokens(tokens, color) < 0:
             raise ValueError("discard counts must be non-negative")
-        if helpers.count(tokens, color) > helpers.count(ap.tokens, color):
+        if helpers.get_tokens(tokens, color) > helpers.get_tokens(ap.tokens, color):
             raise ValueError(f"cannot discard more {color} than held")
-    if helpers.total(tokens) != excess:
+    if helpers.total_tokens(tokens) != excess:
         raise ValueError("discard must remove exactly the excess tokens")
 
     # Tokens go to the bag (spec: excess goes to the bag).
     state = state.add_to_bag(tokens)
-    new_ap = dataclasses.replace(ap, tokens=helpers.sub(ap.tokens, tokens))
-    state = state.replace_player(active, new_ap)
+    new_ap = replace(ap, tokens=helpers.sub_tokens(ap.tokens, tokens))
+    state = state.update_player(active, new_ap)
 
     # The pending seat decision was stashed in ``extra_turn`` by _end_of_turn.
     pending_extra_turn = state.extra_turn
@@ -898,14 +897,14 @@ def _apply_choose_multicolor(state: GameState, color: Color) -> GameState:
 
     # Add bonus_count of chosen color to player's bonus
     bonus_increment = Tokens(**{color.value: card.bonus_count})
-    new_bonus = ap.bonus + bonus_increment
-    new_ap = dataclasses.replace(ap, bonus=new_bonus, purchased=tuple(purchased_list))
+    new_bonus = helpers.add_tokens(ap.bonus, bonus_increment)
+    new_ap = replace(ap, bonus=new_bonus, purchased=tuple(purchased_list))
     new_players = list(state.players)
     new_players[active] = new_ap
 
     # After multicolor: resolve abilities directly
     return _resolve_abilities(
-        dataclasses.replace(
+        replace(
             state,
             players=tuple(new_players),
             pending_ability=None,
@@ -924,19 +923,19 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
     opp = 1 - active
     opp_tokens = state.players[opp].tokens
 
-    if helpers.count(opp_tokens, color) == 0:
+    if helpers.get_tokens(opp_tokens, color) == 0:
         raise ValueError(f"opponent has no {color} tokens to steal")
 
     # Remove token from opponent
     opp_lost = Tokens(**{color.value: -1})
-    new_opp = dataclasses.replace(
-        state.players[opp], tokens=state.players[opp].tokens + opp_lost
+    new_opp = replace(
+        state.players[opp], tokens=helpers.add_tokens(state.players[opp].tokens, opp_lost)
     )
 
     # Add token to active player
     active_gained = Tokens(**{color.value: 1})
-    new_active = dataclasses.replace(
-        state.players[active], tokens=state.players[active].tokens + active_gained
+    new_active = replace(
+        state.players[active], tokens=helpers.add_tokens(state.players[active].tokens, active_gained)
     )
 
     new_players = list(state.players)
@@ -945,7 +944,7 @@ def _apply_choose_steal_token(state: GameState, color: Color) -> GameState:
 
     # After steal: normal turn end (no other abilities on steal cards)
     return _end_of_turn(
-        dataclasses.replace(
+        replace(
             state,
             players=tuple(new_players),
             pending_ability=None,
@@ -982,13 +981,13 @@ def _apply_choose_matching_token(state: GameState, index: int) -> GameState:
     # Add token to player's hand
     taken = Tokens(**{bonus_color.value: 1})
     new_players = list(state.players)
-    new_players[active] = dataclasses.replace(
-        state.players[active], tokens=state.players[active].tokens + taken
+    new_players[active] = replace(
+        state.players[active], tokens=helpers.add_tokens(state.players[active].tokens, taken)
     )
 
     # Normal turn end
     return _end_of_turn(
-        dataclasses.replace(
+        replace(
             state,
             players=tuple(new_players),
             board=new_board,
@@ -1019,13 +1018,13 @@ def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
 
     ap = state.players[active]
     # Add royal: gives prestige, no crowns, no bonus
-    new_ap = dataclasses.replace(
+    new_ap = replace(
         ap,
         prestige=ap.prestige + royal.points,
     )
     new_players = list(state.players)
     new_players[active] = new_ap
-    state = dataclasses.replace(
+    state = replace(
         state,
         players=tuple(new_players),
         royals_available=tuple(new_royals),
@@ -1037,9 +1036,9 @@ def _apply_choose_royal(state: GameState, royal_id: str) -> GameState:
             case Ability.STEAL_TOKEN:
                 opp = 1 - active
                 opp_tokens = state.players[opp].tokens
-                stealable_colors = [c for c in GEM_COLORS if helpers.count(opp_tokens, c) > 0]
+                stealable_colors = [c for c in GEM_COLORS if helpers.get_tokens(opp_tokens, c) > 0]
                 if stealable_colors:
-                    return dataclasses.replace(
+                    return replace(
                         state,
                         phase=Phase.STEAL_TOKEN,
                         pending_ability=Ability.STEAL_TOKEN,
@@ -1067,7 +1066,7 @@ def _end_of_turn(
     so this performs discard (if the player holds more than 10 tokens) then the
     win check, then hands the turn over (or keeps it on an extra turn).
     """
-    state = dataclasses.replace(
+    state = replace(
         state,
         current_player=active,
         pending_buy=None,
@@ -1078,13 +1077,13 @@ def _end_of_turn(
     # abilities have resolved by now, so run the royal step before discard. The
     # flag is one-shot; clear it whether or not royals remain available.
     if state.pending_royal:
-        state = dataclasses.replace(state, pending_royal=False)
+        state = replace(state, pending_royal=False)
         if state.royals_available:
-            return dataclasses.replace(state, phase=Phase.CHOOSE_ROYAL)
-    if helpers.total(state.players[active].tokens) > helpers.TOKEN_LIMIT:
+            return replace(state, phase=Phase.CHOOSE_ROYAL)
+    if helpers.total_tokens(state.players[active].tokens) > helpers.TOKEN_LIMIT:
         # Defer the win check until after the player discards. ``extra_turn``
         # carries the pending-seat decision across the DISCARD decision point.
-        return dataclasses.replace(
+        return replace(
             state,
             phase=Phase.DISCARD,
             extra_turn=extra_turn,
@@ -1099,7 +1098,7 @@ def _finish_turn(state: GameState, active: int, *, extra_turn: bool) -> GameStat
     end of the active player's turn, and an extra turn does not defer it.
     """
     if helpers.is_winner(state.players[active]):
-        return dataclasses.replace(
+        return replace(
             state,
             winner=active,
             current_player=active,
@@ -1107,13 +1106,13 @@ def _finish_turn(state: GameState, active: int, *, extra_turn: bool) -> GameStat
             extra_turn=False,
         )
     if extra_turn:
-        return dataclasses.replace(
+        return replace(
             state,
             current_player=active,
             phase=Phase.USE_PRIVILEGES,
             extra_turn=True,
         )
-    return dataclasses.replace(
+    return replace(
         state,
         current_player=1 - active,
         phase=Phase.USE_PRIVILEGES,

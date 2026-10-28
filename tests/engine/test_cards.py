@@ -38,7 +38,7 @@ def test_multicolor_cards():
     assert all(c.bonus is None and c.bonus_count >= 1 for c in multi)
     # multicolor is orthogonal to abilities: L3-01 is multicolor AND extra_turn (Ruling R3)
     assert [c.id for c in multi if c.ability is not None] == ["L3-01"]
-    # the colorless no-bonus cards have no colour bonus and are not multicolor
+    # the colorless no-bonus cards have no color bonus and are not multicolor
     colorless = [c for c in jewels if not c.is_multicolor and c.bonus is None]
     assert sorted(c.id for c in colorless) == ["L1-29", "L2-23", "L3-12"]
     assert all(c.bonus_count == 0 for c in colorless)

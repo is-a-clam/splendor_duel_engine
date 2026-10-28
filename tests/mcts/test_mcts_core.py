@@ -14,7 +14,7 @@ from splendor_duel_engine.engine.actions import (
 )
 from splendor_duel_engine.engine.cards import load_cards
 from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.observation import observation
+from splendor_duel_engine.engine.observation import get_observation
 from splendor_duel_engine.engine.phase import Phase
 from splendor_duel_engine.engine.state import (
     GameState,
@@ -156,7 +156,7 @@ def test_backpropagate_partial_result():
 
 def test_mcts_search_returns_legal_action():
     state = _advance_to_mandatory(GameState.new_game(0))
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det_state = determinize(obs, random.Random(0))
     visits = mcts_search(det_state, random.Random(0), max_playouts=100)
     # Action must be legal in the original state
@@ -168,7 +168,7 @@ def test_mcts_search_returns_legal_action():
 
 def test_mcts_search_deterministic_with_same_seed():
     state = _advance_to_mandatory(GameState.new_game(0))
-    obs = observation(state, 0)
+    obs = get_observation(state, 0)
     det = determinize(obs, random.Random(0))
     a1 = mcts_search(det, random.Random(42), max_playouts=200)
     a2 = mcts_search(det, random.Random(42), max_playouts=200)

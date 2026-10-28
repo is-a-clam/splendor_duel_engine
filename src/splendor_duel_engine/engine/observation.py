@@ -10,14 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from splendor_duel_engine.engine.cards import Card, RoyalCard
-from splendor_duel_engine.engine.colors import Color, Tokens
-from splendor_duel_engine.engine.phase import Phase
-from splendor_duel_engine.engine.state import GameState, PurchasedCard
-
 if TYPE_CHECKING:
     from splendor_duel_engine.engine.actions import BuyCard, ReserveCard
+    from splendor_duel_engine.engine.cards import Card, RoyalCard
+    from splendor_duel_engine.engine.colors import Color, Tokens
+    from splendor_duel_engine.engine.phase import Phase
     from splendor_duel_engine.engine.cards import Ability
+    from splendor_duel_engine.engine.state import GameState, PurchasedCard
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,9 +38,9 @@ class Observation:
     """Observation of the game from the active player's perspective.
 
     **Invariant:** an observation handed to an agent is always taken from the
-    active player's perspective — `you` is the player to move, and
-    `current_player` is that player's seat index. There is no separate observer
-    field, because an agent only ever observes the position it must act on.
+    active player's perspective.
+    `you` is the player to move (active player).
+    `current_player` is that player's seat index.
     """
 
     you: PlayerView
@@ -54,7 +53,7 @@ class Observation:
     bag: Tokens
     current_player: int
     winner: int | None
-    your_reserved_deck: tuple[Card, ...]  # own hidden deck reservations
+    your_reserved_deck: tuple[Card, ...]
     phase: Phase
     # Pending action fields for sub-decision phases
     pending_buy: BuyCard | None = None
@@ -64,7 +63,7 @@ class Observation:
     extra_turn: bool = False
 
 
-def observation(state: GameState, player: int) -> Observation:
+def get_observation(state: GameState, player: int) -> Observation:
     """Create an observation of the state from the given player's perspective.
 
     Production callers pass `state.current_player`; the function accepts any
